@@ -133,7 +133,22 @@ export interface EnvSettings {
   etsiLimitEirpDbm: number; // 2 W ERP = 35.15 dBm EIRP
 }
 
+export interface LinePoint {
+  sM: number; // distance along the track, 0 = finish, negative = before
+  frac: number; // lateral position as a fraction of the local width: -0.5 left edge … +0.5 right edge
+}
+
+export interface RiderLine {
+  id: string;
+  name: string;
+  enabled: boolean;
+  points: LinePoint[];
+}
+
 export interface SimSettings {
+  includeLanes: boolean; // straight lanes at constant lateral position
+  lines: RiderLine[]; // custom rider lines (corner cuts, …)
+  randomLines: number; // additional random smooth lines
   lanes: number;
   speedKmh: number;
   trials: number;

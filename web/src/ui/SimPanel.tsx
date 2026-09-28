@@ -3,6 +3,7 @@ import { estimatePassTime } from '../rf/regression';
 import { optimizeAsync, runSimAsync } from '../rf/workerClient';
 import { portColor, useStore } from '../store';
 import { Check, NumField, Section, Select } from './controls';
+import { RiderLinesSection } from './RiderLines';
 import { RssiChart } from './RssiChart';
 
 export function SimPanel() {
@@ -48,9 +49,9 @@ export function SimPanel() {
 
   return (
     <>
+      <RiderLinesSection />
       <Section title="Pass simulation">
         <div className="grid2">
-          <NumField label="Lanes" value={cfg.lanes} min={1} max={25} step={1} onChange={(lanes) => updateSim({ lanes: Math.round(lanes) })} />
           <NumField label="Speed" unit="km/h" value={cfg.speedKmh} min={1} max={120} step={5} onChange={(speedKmh) => updateSim({ speedKmh })} />
           <NumField label="Trials / lane" value={cfg.trials} min={1} max={100} step={1} onChange={(trials) => updateSim({ trials: Math.round(trials) })} />
           <NumField label="RSSI noise σ" unit="dB" value={cfg.rssiNoiseDb} min={0} max={10} step={0.5} onChange={(rssiNoiseDb) => updateSim({ rssiNoiseDb })} />
@@ -115,7 +116,8 @@ export function SimPanel() {
           <table className="tbl lanes">
             <thead>
               <tr>
-                <th>Lane</th>
+                <th>Line</th>
+                <th title="Position at the finish crossing">At finish</th>
                 <th>Reads</th>
                 {ports.map((p) => <th key={p} style={{ color: portColor(p) }}>P{p}</th>)}
                 <th>Offset</th>
@@ -125,6 +127,7 @@ export function SimPanel() {
             <tbody>
               {sim.lanes.map((l, i) => (
                 <tr key={i} className={i === selectedLane ? 'sel' : ''} onClick={() => setSim({ selectedLane: i })}>
+                  <td className={l.kind === 'lane' ? '' : 'line-label'}>{l.kind === 'lane' ? 'Lane' : l.label}</td>
                   <td>{l.lateralM > 0 ? '+' : ''}{l.lateralM.toFixed(1)} m</td>
                   <td>{l.meanReads.toFixed(0)}</td>
                   {ports.map((p) => <td key={p}>{(l.readsPerPort[p] ?? 0).toFixed(0)}</td>)}
@@ -134,7 +137,10 @@ export function SimPanel() {
               ))}
             </tbody>
           </table>
-          <p className="muted">Lane offset: − = left side, + = right side (in direction of travel). Click a lane to see its reads.</p>
+          <p className="muted">
+            "At finish": where the line crosses the finish, − = left side, + = right side (in direction of travel). Grey = straight lanes, orange = rider
+            lines (dashed = random). Click a row to see its reads.
+          </p>
           {lane && <RssiChart reads={lane.sampleReads} estimate={estimate} />}
         </Section>
       )}

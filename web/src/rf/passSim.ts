@@ -2,19 +2,25 @@ import type { Setup, Vec3 } from '../model/types';
 import { buildLinkCtx, eirpLinearDbm, evalLink, tagAxisWorld, type LinkCtx } from './link';
 import { estimatePassTime, type Read } from './regression';
 import { makeRng } from './rng';
+import { buildTrajectories, crossingS, fracAt, laneOffsets, trajPoint, trajState, type Trajectory } from './lines';
 import { finishWidth, TrackPath } from './track';
 
 export interface LaneResult {
-  lateralM: number; // lateral offset at the finish line
-  laneFrac: number; // lane as a fraction of the local track width (-0.5 .. 0.5)
+  id: string;
+  label: string;
+  kind: Trajectory['kind'];
+  trajectory: Trajectory;
+  crossS: number; // arc length where this line crosses the finish plane
+  lateralM: number; // lateral offset at the finish crossing
+  laneFrac: number; // lateral position at the finish as a fraction of the width
   meanReads: number;
   readsPerPort: Record<number, number>; // mean per trial
   missRate: number; // fraction of trials without a time estimate
   meanErrCm: number; // + = time estimated after the true finish crossing
   stdErrCm: number;
   errorsCm: number[];
-  wallPoint: Vec3 | null; // where the timing "sees" the finish for this lane
-  sampleReads: Read[]; // reads of the first trial (for charts)
+  wallPoint: Vec3 | null; // where the timing "sees" the finish for this line
+  sampleReads: Read[]; // reads of the first trial (for charts), t relative to the true crossing
 }
 
 export interface SimResult {
@@ -33,6 +39,8 @@ export interface SimOptions {
   keepSamples?: boolean;
 }
 
+export { laneOffsets };
+
 const mean = (a: number[]) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
 const std = (a: number[]) => {
   if (a.length < 2) return 0;
@@ -40,19 +48,8 @@ const std = (a: number[]) => {
   return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1));
 };
 
-export function laneOffsets(widthM: number, lanes: number): number[] {
-  if (lanes <= 1) return [0];
-  const edge = Math.min(0.5, widthM / 4);
-  return Array.from({ length: lanes }, (_, i) => -widthM / 2 + edge + (i * (widthM - 2 * edge)) / (lanes - 1));
-}
-
-function simulatePass(
-  ctx: LinkCtx,
-  path: TrackPath,
-  setup: Setup,
-  frac: number,
-  seed: number,
-): Read[] {
+/** One simulated pass along a trajectory; read times are relative to the true finish crossing. */
+function simulatePass(ctx: LinkCtx, path: TrackPath, setup: Setup, tr: Trajectory, crossS: number, seed: number): Read[] {
   const rng = makeRng(seed);
   const { sim, readerProfile: rp, tag } = setup;
   const v = sim.speedKmh / 3.6;
@@ -68,12 +65,10 @@ function simulatePass(
     const a = ctx.antennas[((slot % nAnt) + nAnt) % nAnt];
     const noise = rng.gauss() * sim.rssiNoiseDb;
     const protocolOk = rng.next() < 0.9;
-    const smp = path.sample(v * t);
-    const lateral = frac * path.width(v * t);
-    const pos: Vec3 = [smp.pos[0] + smp.right[0] * lateral, smp.pos[1] + tag.heightM, smp.pos[2] + smp.right[2] * lateral];
-    const res = evalLink(ctx, a, pos, tagAxisWorld(tag.axis, smp.dir, smp.right));
+    const st = trajState(path, tr, v * t, tag.heightM);
+    const res = evalLink(ctx, a, st.pos, tagAxisWorld(tag.axis, st.dir, st.right));
     if (protocolOk && res.margin + noise > 0) {
-      reads.push({ t, port: a.antenna.port, antennaId: a.antenna.id, rssi: Math.round(res.rssiDbm + noise) });
+      reads.push({ t: t - crossS / v, port: a.antenna.port, antennaId: a.antenna.id, rssi: Math.round(res.rssiDbm + noise) });
     }
   }
   return reads;
@@ -85,16 +80,16 @@ export function runPassSim(setup: Setup, opts: SimOptions = {}): SimResult {
   const { sim } = setup;
   const v = sim.speedKmh / 3.6;
   const fw = finishWidth(setup.track);
-  const lanes: LaneResult[] = laneOffsets(fw, sim.lanes).map((lateral, li) => {
-    const frac = lateral / fw;
+  const lanes: LaneResult[] = buildTrajectories(setup).map((tr, li) => {
+    const crossS = crossingS(path, tr);
     const errors: number[] = [];
     const perPort: Record<number, number> = {};
     let totalReads = 0;
     let misses = 0;
     let sample: Read[] = [];
-    for (let tr = 0; tr < sim.trials; tr++) {
-      const reads = simulatePass(ctx, path, setup, frac, sim.seed * 100003 + li * 1009 + tr);
-      if (tr === 0 && opts.keepSamples) sample = reads;
+    for (let trial = 0; trial < sim.trials; trial++) {
+      const reads = simulatePass(ctx, path, setup, tr, crossS, sim.seed * 100003 + li * 1009 + trial);
+      if (trial === 0 && opts.keepSamples) sample = reads;
       totalReads += reads.length;
       for (const r of reads) perPort[r.port] = (perPort[r.port] ?? 0) + 1;
       const tEst = estimatePassTime(reads, sim.antennaChoice, sim.method);
@@ -103,8 +98,14 @@ export function runPassSim(setup: Setup, opts: SimOptions = {}): SimResult {
     }
     for (const p of Object.keys(perPort)) perPort[+p] /= sim.trials;
     const meanErr = mean(errors);
+    const frac = fracAt(tr, crossS);
     return {
-      lateralM: lateral,
+      id: tr.id,
+      label: tr.label,
+      kind: tr.kind,
+      trajectory: tr,
+      crossS,
+      lateralM: frac * fw,
       laneFrac: frac,
       meanReads: totalReads / sim.trials,
       readsPerPort: perPort,
@@ -112,7 +113,7 @@ export function runPassSim(setup: Setup, opts: SimOptions = {}): SimResult {
       meanErrCm: meanErr,
       stdErrCm: std(errors),
       errorsCm: errors,
-      wallPoint: errors.length ? path.lanePoint(meanErr / 100, frac, setup.tag.heightM) : null,
+      wallPoint: errors.length ? trajPoint(path, tr, crossS + meanErr / 100, setup.tag.heightM) : null,
       sampleReads: sample,
     };
   });
@@ -121,7 +122,7 @@ export function runPassSim(setup: Setup, opts: SimOptions = {}): SimResult {
   const meanErrCm = mean(allErr);
   const stdErrCm = std(allErr);
   const maxAbsLaneErrCm = Math.max(0, ...lanes.filter((l) => l.errorsCm.length).map((l) => Math.abs(l.meanErrCm)));
-  const minLaneReads = Math.min(...lanes.map((l) => l.meanReads));
+  const minLaneReads = lanes.length ? Math.min(...lanes.map((l) => l.meanReads)) : 0;
   const score = objective({ missRate, meanErrCm, stdErrCm, maxAbsLaneErrCm, minLaneReads });
   const txDbm: Record<string, number> = {};
   for (const a of ctx.antennas) txDbm[a.antenna.id] = a.antenna.txDbm;

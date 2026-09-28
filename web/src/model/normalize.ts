@@ -154,6 +154,7 @@ function withGround(s: Setup): Setup {
   return {
     ...s,
     obstacles: s.obstacles ?? [],
+    sim: { ...s.sim, includeLanes: s.sim.includeLanes ?? true, lines: s.sim.lines ?? [], randomLines: s.sim.randomLines ?? 0 },
     env: {
       ...env,
       ground: env.ground ?? groundPreset('clay-moist'),

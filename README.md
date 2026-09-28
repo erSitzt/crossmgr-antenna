@@ -6,7 +6,7 @@ A 3D planner for UHF RFID finish-line antennas (Impinj R420/R700 + circularly po
 - **3D scene**: a track built from segments (turns, ramps, finish tables, changing width), finish arch trusses, obstacles (hay bales, banners, barriers, …), and 2–4 antennas with position + yaw / tilt / roll (gizmo: `W` move, `E` rotate). Antennas can be mounted on the truss.
 - **RF model**: antenna pattern (gain, beamwidth, front/back), forward link (tag power-up) and reverse link (RSSI), tag dipole orientation, polarisation / body loss, obstacle losses, blocking by the raised track, ground reflection by ground type (track surface and surroundings), ETSI 2 W ERP check.
 - **Views**: a 3D read-zone shape per antenna, plus heatmaps at tag height and in the finish plane (strongest antenna / overlap / RSSI / margin).
-- **Virtual wall**: simulated passes per lane, with the pass time estimated like CrossMgrImpinj (antenna with most reads → quadratic RSSI peak). Shows the timing offset in cm per lane.
+- **Virtual wall**: simulated passes along straight lanes and realistic rider lines (corner cuts, random lines), with the pass time estimated like CrossMgrImpinj (antenna with most reads → quadratic RSSI peak). Shows the timing offset in cm per line.
 - **Power optimiser**: searches per-antenna Tx power (within reader/ETSI limits) for zero missed passes and the wall exactly on the finish line.
 - **Live reader**: direct LLRP via sllurp. Pushes per-port power, groups reads into passes, plots RSSI curves, records sessions, and calibrates the model per port (measured vs. simulated peak RSSI).
 
@@ -30,7 +30,7 @@ Presets cover straight, finish before / after a left or right turn, and a **fini
 
 Things that follow the track:
 - Tag heights are measured from the local track surface, so tags ride up ramps.
-- Simulated lanes keep their share of the local width, so a lane on the left edge of a narrow approach stays on the left edge of a wider table.
+- Simulated lanes and rider lines are defined as a share of the local width, so a lane on the left edge of a narrow approach stays on the left edge of a wider table.
 - The heatmap slider sets the height above the finish surface.
 
 **Finish arch.** Clear height, span and section are set in *Track & view*. The truss base follows the track elevation, so an arch on a finish table stands on the table (switch this off to set the base elevation yourself). A warning appears if the uprights stand on the track, with a button to fit the span.
@@ -95,6 +95,16 @@ cd server && python -m venv .venv && .venv/Scripts/pip install -r requirements.t
 
 The dev server proxies `/ws` and `/api` to the backend on port 18787 (override with the `PORT` env var).
 Tests: `cd web && npm test`.
+
+## Rider lines
+
+Riders rarely hold a lane. In the *Simulation* tab, **Rider lines** are simulated alongside the straight lanes:
+
+- **Custom lines**: a list of points, each "distance to the finish (− = before)" and "position across the track in % of the local width" (−50 % = left edge, +50 % = right edge, in direction of travel). The rider moves smoothly between points and holds the first/last position outside them. ⇆ mirrors a line.
+- **Presets**: corner cut right edge → crosses left, corner cut left edge → crosses right, tight on the left edge, swing wide right. The finish-after-a-turn presets start with a matching corner-cut line (after a right turn: in on the right edge, across to the left antennas).
+- **Random lines**: extra smooth lines with random entry, crossing and exit positions (seeded, reproducible).
+
+The timing error of each line is measured against the moment it really crosses the finish plane. The tag orientation follows the actual direction of travel. All lines count in the optimiser. In 3D, straight lanes are grey, rider lines orange (random: dashed). The red wall connects the straight lanes; orange dots mark where timing fires on each rider line.
 
 ## Live tuning workflow
 

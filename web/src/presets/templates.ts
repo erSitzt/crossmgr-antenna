@@ -2,6 +2,7 @@ import { newId } from '../model/ids';
 import { normalizeSetup } from '../model/normalize';
 import type { Antenna, Setup, Track, TrackSegment, Truss } from '../model/types';
 import { groundPreset } from '../rf/ground';
+import { makeLine } from '../rf/lines';
 import { ANTENNA_PROFILES, READER_PROFILES, TAG_PRESETS } from './profiles';
 
 export { newId };
@@ -87,6 +88,13 @@ export function makeTrack(preset: TrackPreset, widthM = 8): Track {
   }
 }
 
+/** A corner-cut line matching the turn before the finish (riders cut across to the other side). */
+function defaultLines(preset: TrackPreset) {
+  if (preset === 'afterRight' || preset === 'tableAfterRight') return [makeLine('cut-right-left', newId('line'))];
+  if (preset === 'afterLeft' || preset === 'tableAfterLeft') return [makeLine('cut-left-right', newId('line'))];
+  return [];
+}
+
 /** Default: finish arch with 2 antennas on the left upright (low/high) pointing right and 1 overhead pointing down. */
 export function makeDefaultSetup(preset: TrackPreset = 'straight'): Setup {
   const track = makeTrack(preset);
@@ -116,6 +124,9 @@ export function makeDefaultSetup(preset: TrackPreset = 'straight'): Setup {
       etsiLimitEirpDbm: 35.15,
     },
     sim: {
+      includeLanes: true,
+      lines: defaultLines(preset),
+      randomLines: 0,
       lanes: 7,
       speedKmh: 40,
       trials: 10,
