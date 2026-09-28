@@ -40,6 +40,20 @@ function CameraRig({ preset, nonce }: { preset: CameraPreset; nonce: number }) {
       oc.update();
     } else camera.lookAt(target);
   }, [preset, nonce, camera, controls]);
+  // development only: lets scripts (docs screenshots) place the camera precisely
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as { __camera?: unknown }).__camera = {
+      set(pos: [number, number, number], target: [number, number, number]) {
+        camera.position.set(...pos);
+        const oc = controls as unknown as { target: THREE.Vector3; update: () => void } | null;
+        if (oc) {
+          oc.target.set(...target);
+          oc.update();
+        } else camera.lookAt(...target);
+      },
+    };
+  }, [camera, controls]);
   return null;
 }
 

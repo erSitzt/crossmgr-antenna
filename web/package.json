@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "model:optimize": "gltf-transform optimize public/models/source/Stark.glb public/models/stark-varg-mx1.glb --compress meshopt --simplify-ratio 0.15 --simplify-error 0.002 --texture-compress false"
+    "model:optimize": "gltf-transform optimize public/models/source/Stark.glb public/models/stark-varg-mx1.glb --compress meshopt --simplify-ratio 0.15 --simplify-error 0.002 --texture-compress false",
+    "docs:screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.0",
@@ -25,6 +26,7 @@
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.169.0",
     "@vitejs/plugin-react": "^4.3.3",
+    "puppeteer-core": "^23.11.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vitest": "^2.1.4"
