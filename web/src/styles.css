@@ -85,3 +85,17 @@ p { margin: 6px 0; line-height: 1.4; }
 .ant-label.warn { color: var(--warn); }
 
 .log { font-family: ui-monospace, Consolas, monospace; font-size: 11px; max-height: 180px; overflow-y: auto; background: var(--bg); border-radius: 4px; padding: 4px 6px; }
+
+.segments { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.segments li { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.segments li.finish { border-color: #fff; }
+.seg-head { display: flex; align-items: center; gap: 6px; }
+.seg-head select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; font: inherit; }
+.seg-head .muted { flex: 1; font-size: 11px; }
+.seg-actions { display: flex; gap: 2px; }
+.seg-actions button { padding: 1px 6px; }
+button.link { background: none; border: 0; color: var(--accent); padding: 2px 0; }
+button.link:hover { text-decoration: underline; }
+.arch { background: var(--panel-2); border-radius: 6px; padding: 4px 8px; margin: 6px 0; }
+.arch .row { justify-content: space-between; margin: 2px 0; }
+.mounted { color: var(--muted); font-size: 11px; }

@@ -1,77 +1,172 @@
-import type { Track, Vec3 } from '../model/types';
+import type { Track, TrackSegment, Vec3 } from '../model/types';
 import { DEG } from './math';
 
 /**
- * Track centreline parametrised by arc length s (metres), s = 0 at the finish line.
- * Heading at the finish is always +X, so the finish plane is X = 0 locally.
- * A left turn rotates the heading towards -Z, a right turn towards +Z.
+ * Track centreline built from a chain of segments (straight / left arc / right arc), each with a
+ * linear height change. Parametrised by arc length s (metres) with s = 0 at the finish line.
+ * The path is placed so that the finish is at X = Z = 0 with heading +X; Y is the absolute
+ * track elevation. A left turn rotates the heading towards -Z, a right turn towards +Z.
+ * Beyond both ends the track continues straight and level so simulations never run off the end.
  */
 export interface TrackSample {
   s: number;
-  pos: Vec3; // centreline point at ground level
-  dir: Vec3; // unit tangent
+  pos: Vec3; // centreline point on the track surface (Y = elevation)
+  dir: Vec3; // unit tangent (horizontal)
   right: Vec3; // unit normal pointing to the rider's right
 }
 
-function headingAt(track: Track, s: number): number {
-  if (track.shape === 'straight') return 0;
-  const sign = track.shape === 'left' ? 1 : -1;
-  const maxA = track.turnAngleDeg * DEG;
-  const a = (x: number) => Math.min(Math.max((x - track.turnStartM) / track.radiusM, 0), maxA);
-  return sign * (a(s) - a(0));
+const EXTEND = 60;
+
+export const segmentLength = (g: TrackSegment) =>
+  g.kind === 'straight' ? Math.max(g.lengthM, 0) : Math.max(g.radiusM, 0.5) * Math.max(g.angleDeg, 0) * DEG;
+
+const curvature = (g: TrackSegment) =>
+  g.kind === 'straight' ? 0 : (g.kind === 'left' ? 1 : -1) / Math.max(g.radiusM, 0.5);
+
+/** Arc-length position (from the start of the first segment) where each segment starts. */
+export function segmentStarts(track: Track): number[] {
+  const out: number[] = [];
+  let u = 0;
+  for (const g of track.segments) {
+    out.push(u);
+    u += segmentLength(g);
+  }
+  return out;
 }
 
-const dirFromHeading = (h: number): Vec3 => [Math.cos(h), 0, -Math.sin(h)];
-const rightFromHeading = (h: number): Vec3 => [Math.sin(h), 0, Math.cos(h)];
+export function totalLength(track: Track): number {
+  return track.segments.reduce((a, g) => a + segmentLength(g), 0);
+}
+
+/** Arc length of the finish line measured from the start of the first segment. */
+export function finishU(track: Track): number {
+  const starts = segmentStarts(track);
+  const i = Math.max(0, track.segments.findIndex((g) => g.id === track.finishSegmentId));
+  const g = track.segments[i];
+  if (!g) return 0;
+  return starts[i] + Math.min(Math.max(track.finishOffsetM, 0), segmentLength(g));
+}
+
+/** Elevation at arc length u (from the start of the first segment). */
+export function elevationAtU(track: Track, u: number): number {
+  let e = track.startElevationM;
+  let start = 0;
+  for (const g of track.segments) {
+    const len = segmentLength(g);
+    if (u <= start + len) {
+      return len > 0 ? e + (g.riseM * Math.max(u - start, 0)) / len : e;
+    }
+    e += g.riseM;
+    start += len;
+  }
+  return e;
+}
+
+export const finishElevation = (track: Track) => elevationAtU(track, finishU(track));
 
 export class TrackPath {
   private readonly ds = 0.05;
-  private readonly s0: number;
+  private readonly u0: number; // arc length of the first sample
+  private readonly uFinish: number;
   private readonly xs: Float64Array;
   private readonly zs: Float64Array;
+  private readonly ys: Float64Array;
+  private readonly hs: Float64Array;
 
   constructor(public readonly track: Track) {
-    this.s0 = -track.lengthBeforeM;
-    const n = Math.ceil((track.lengthAfterM + track.lengthBeforeM) / this.ds) + 1;
+    const L = totalLength(track);
+    this.u0 = -EXTEND;
+    this.uFinish = finishU(track);
+    const n = Math.ceil((L + 2 * EXTEND) / this.ds) + 1;
     this.xs = new Float64Array(n);
     this.zs = new Float64Array(n);
-    const i0 = Math.round(-this.s0 / this.ds);
-    // integrate forward and backward from the finish (origin)
-    for (let i = i0 + 1; i < n; i++) {
-      const h = headingAt(track, this.s0 + (i - 0.5) * this.ds);
-      this.xs[i] = this.xs[i - 1] + Math.cos(h) * this.ds;
-      this.zs[i] = this.zs[i - 1] - Math.sin(h) * this.ds;
+    this.ys = new Float64Array(n);
+    this.hs = new Float64Array(n);
+
+    // curvature lookup per sample
+    const starts = segmentStarts(track);
+    const kAt = (u: number) => {
+      for (let i = track.segments.length - 1; i >= 0; i--)
+        if (u >= starts[i]) return u < starts[i] + segmentLength(track.segments[i]) ? curvature(track.segments[i]) : 0;
+      return 0;
+    };
+    let h = 0, x = 0, z = 0;
+    for (let i = 0; i < n; i++) {
+      const u = this.u0 + i * this.ds;
+      if (i > 0) {
+        const hm = h + (kAt(u - this.ds / 2) * this.ds) / 2;
+        x += Math.cos(hm) * this.ds;
+        z -= Math.sin(hm) * this.ds;
+        h += kAt(u - this.ds / 2) * this.ds;
+      }
+      this.xs[i] = x; this.zs[i] = z; this.hs[i] = h;
+      this.ys[i] = elevationAtU(track, u);
     }
-    for (let i = i0 - 1; i >= 0; i--) {
-      const h = headingAt(track, this.s0 + (i + 0.5) * this.ds);
-      this.xs[i] = this.xs[i + 1] - Math.cos(h) * this.ds;
-      this.zs[i] = this.zs[i + 1] + Math.sin(h) * this.ds;
+    // move the finish to the origin with heading 0
+    const fi = (this.uFinish - this.u0) / this.ds;
+    const fx = this.interp(this.xs, fi), fz = this.interp(this.zs, fi), fh = this.interp(this.hs, fi);
+    const c = Math.cos(fh), sn = Math.sin(fh);
+    for (let i = 0; i < n; i++) {
+      const dx = this.xs[i] - fx, dz = this.zs[i] - fz;
+      // rotate by +fh about Y (heading fh -> 0): heading vector (cos h, -sin h)
+      this.xs[i] = dx * c - dz * sn;
+      this.zs[i] = dx * sn + dz * c;
+      this.hs[i] -= fh;
     }
+  }
+
+  private interp(a: Float64Array, f: number): number {
+    const fc = Math.min(Math.max(f, 0), a.length - 1.000001);
+    const i = Math.floor(fc), t = fc - i;
+    return a[i] * (1 - t) + a[i + 1] * t;
+  }
+
+  private idx(s: number) {
+    return (s + this.uFinish - this.u0) / this.ds;
   }
 
   get minS() {
-    return this.s0;
+    return this.u0 - this.uFinish;
   }
   get maxS() {
-    return this.s0 + (this.xs.length - 1) * this.ds;
+    return this.u0 + (this.xs.length - 1) * this.ds - this.uFinish;
+  }
+  /** s of the start / end of the configured segments (without the straight extensions). */
+  get trackStartS() {
+    return -this.uFinish;
+  }
+  get trackEndS() {
+    return totalLength(this.track) - this.uFinish;
+  }
+
+  elevation(s: number): number {
+    return this.interp(this.ys, this.idx(s));
   }
 
   sample(s: number): TrackSample {
-    const f = Math.min(Math.max((s - this.s0) / this.ds, 0), this.xs.length - 1.0001);
-    const i = Math.floor(f);
-    const t = f - i;
-    const h = headingAt(this.track, s);
+    const f = this.idx(s);
+    const h = this.interp(this.hs, f);
     return {
       s,
-      pos: [this.xs[i] * (1 - t) + this.xs[i + 1] * t, 0, this.zs[i] * (1 - t) + this.zs[i + 1] * t],
-      dir: dirFromHeading(h),
-      right: rightFromHeading(h),
+      pos: [this.interp(this.xs, f), this.interp(this.ys, f), this.interp(this.zs, f)],
+      dir: [Math.cos(h), 0, -Math.sin(h)],
+      right: [Math.sin(h), 0, Math.cos(h)],
     };
   }
 
-  /** Point at arc length s, lateral offset (positive = right) and height. */
+  /** Point at arc length s, lateral offset (positive = right) and height above the track surface. */
   point(s: number, lateral: number, height: number): Vec3 {
     const smp = this.sample(s);
-    return [smp.pos[0] + smp.right[0] * lateral, height, smp.pos[2] + smp.right[2] * lateral];
+    return [smp.pos[0] + smp.right[0] * lateral, smp.pos[1] + height, smp.pos[2] + smp.right[2] * lateral];
+  }
+
+  /** Arc length of the centreline point closest to (x, z) in plan view. */
+  nearestS(x: number, z: number): number {
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < this.xs.length; i += 4) {
+      const d = (this.xs[i] - x) ** 2 + (this.zs[i] - z) ** 2;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return this.u0 + best * this.ds - this.uFinish;
   }
 }

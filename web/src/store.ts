@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import type { Antenna, AntennaProfile, EnvSettings, ReaderProfile, Setup, SimSettings, TagProfile, Track, TrackShape, Truss } from './model/types';
-import { makeAntenna, makeDefaultSetup, makeTruss, newId } from './presets/templates';
+import { migrateSetup, normalizeSetup } from './model/normalize';
+import type { Antenna, AntennaProfile, EnvSettings, ReaderProfile, Setup, SimSettings, TagProfile, Track, TrackSegment, Truss } from './model/types';
+import { makeAntenna, makeDefaultSetup, makeSegment, makeTrack, makeTruss, newId, type TrackPreset } from './presets/templates';
 import type { SliceData, ZoneMesh } from './rf/grid';
 import type { OptimizeProgress, SimResult } from './rf/passSim';
 
@@ -38,7 +39,12 @@ interface State {
   setTransformMode: (m: TransformMode) => void;
   setView: (p: Partial<ViewSettings>) => void;
   loadSetup: (s: Setup) => void;
-  newFromTemplate: (shape: TrackShape) => void;
+  newFromTemplate: (preset: TrackPreset) => void;
+  setTrackPreset: (preset: TrackPreset) => void;
+  addSegment: (afterId?: string) => void;
+  updateSegment: (id: string, p: Partial<TrackSegment>) => void;
+  removeSegment: (id: string) => void;
+  moveSegment: (id: string, dir: -1 | 1) => void;
   setName: (name: string) => void;
   updateTrack: (p: Partial<Track>) => void;
   updateTag: (p: Partial<TagProfile>) => void;
@@ -64,10 +70,7 @@ const STORAGE_KEY = 'crossmgr-antenna.setup';
 function loadInitial(): Setup {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const s = JSON.parse(raw) as Setup;
-      if (s.version === 1) return s;
-    }
+    if (raw) return migrateSetup(JSON.parse(raw));
   } catch {
     /* ignore */
   }
@@ -75,7 +78,8 @@ function loadInitial(): Setup {
 }
 
 export const useStore = create<State>((set, get) => {
-  const mut = (fn: (s: Setup) => Setup) => set({ setup: fn(get().setup) });
+  const mut = (fn: (s: Setup) => Setup) => set({ setup: normalizeSetup(fn(get().setup)) });
+  const mutTrack = (fn: (t: Track) => Track) => mut((s) => ({ ...s, track: fn(s.track) }));
   return {
     setup: loadInitial(),
     selectedId: null,
@@ -104,11 +108,39 @@ export const useStore = create<State>((set, get) => {
     select: (id) => set({ selectedId: id }),
     setTransformMode: (m) => set({ transformMode: m }),
     setView: (p) => set({ view: { ...get().view, ...p } }),
-    loadSetup: (s) => set({ setup: s, selectedId: null, sim: null }),
-    newFromTemplate: (shape) => {
-      const s = makeDefaultSetup(shape);
+    loadSetup: (s) => set({ setup: migrateSetup(s), selectedId: null, sim: null }),
+    newFromTemplate: (preset) => {
+      const s = makeDefaultSetup(preset);
       set({ setup: s, selectedId: null, sim: null, view: { ...get().view, sliceHeight: s.tag.heightM } });
     },
+    setTrackPreset: (preset) => mutTrack((t) => makeTrack(preset, t.widthM)),
+    addSegment: (afterId) =>
+      mutTrack((t) => {
+        const i = afterId ? t.segments.findIndex((g) => g.id === afterId) : t.segments.length - 1;
+        const segments = t.segments.slice();
+        segments.splice(i + 1, 0, makeSegment('straight', { lengthM: 10 }));
+        return { ...t, segments };
+      }),
+    updateSegment: (id, p) =>
+      mutTrack((t) => ({ ...t, segments: t.segments.map((g) => (g.id === id ? { ...g, ...p } : g)) })),
+    removeSegment: (id) =>
+      mutTrack((t) => {
+        if (t.segments.length <= 1) return t;
+        const i = t.segments.findIndex((g) => g.id === id);
+        const segments = t.segments.filter((g) => g.id !== id);
+        if (t.finishSegmentId !== id) return { ...t, segments };
+        const next = segments[Math.min(i, segments.length - 1)];
+        return { ...t, segments, finishSegmentId: next.id, finishOffsetM: 0 };
+      }),
+    moveSegment: (id, dir) =>
+      mutTrack((t) => {
+        const i = t.segments.findIndex((g) => g.id === id);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= t.segments.length) return t;
+        const segments = t.segments.slice();
+        [segments[i], segments[j]] = [segments[j], segments[i]];
+        return { ...t, segments };
+      }),
     setName: (name) => mut((s) => ({ ...s, name })),
     updateTrack: (p) => mut((s) => ({ ...s, track: { ...s.track, ...p } })),
     updateTag: (p) => mut((s) => ({ ...s, tag: { ...s.tag, ...p } })),
@@ -129,15 +161,16 @@ export const useStore = create<State>((set, get) => {
       const used = new Set(s.antennas.map((a) => a.port));
       const port = [1, 2, 3, 4].find((p) => !used.has(p)) ?? s.antennas.length + 1;
       const truss = s.trusses[0];
-      const half = (truss?.spanM ?? s.track.widthM + 1) / 2 - (truss?.sectionM ?? 0.3);
-      const h = truss?.heightM ?? 4.5;
+      const half = (s.track.widthM + 1) / 2;
+      const mount = (member: 'left' | 'right' | 'top', alongM: number) =>
+        truss ? { mount: { trussId: truss.id, member, alongM } } : {};
       const a =
         preset === 'top'
-          ? makeAntenna({ port, name: `Top ${port}`, position: [0, h - 0.3, 0], pitchDeg: 90 })
+          ? makeAntenna({ port, name: `Top ${port}`, position: [0, 4.2, 0], pitchDeg: 90, ...mount('top', 0) })
           : preset === 'right'
-            ? makeAntenna({ port, name: `Right ${port}`, position: [0, 1.0, half], yawDeg: 180 })
-            : makeAntenna({ port, name: `Left ${port}`, position: [0, 1.0, -half] });
-      set({ setup: { ...s, antennas: [...s.antennas, a] }, selectedId: a.id });
+            ? makeAntenna({ port, name: `Right ${port}`, position: [0, 1.0, half], yawDeg: 180, ...mount('right', 1.0) })
+            : makeAntenna({ port, name: `Left ${port}`, position: [0, 1.0, -half], ...mount('left', 1.0) });
+      set({ setup: normalizeSetup({ ...s, antennas: [...s.antennas, a] }), selectedId: a.id });
     },
     duplicateAntenna: (id) => {
       const s = get().setup;
@@ -151,8 +184,9 @@ export const useStore = create<State>((set, get) => {
         port,
         name: `${src.name} copy`,
         position: [src.position[0], src.position[1] + 0.5, src.position[2]],
+        mount: src.mount ? { ...src.mount, alongM: src.mount.alongM + 0.5 } : undefined,
       };
-      set({ setup: { ...s, antennas: [...s.antennas, a] }, selectedId: a.id });
+      set({ setup: normalizeSetup({ ...s, antennas: [...s.antennas, a] }), selectedId: a.id });
     },
     removeAntenna: (id) => {
       mut((s) => ({ ...s, antennas: s.antennas.filter((a) => a.id !== id) }));

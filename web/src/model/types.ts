@@ -56,33 +56,58 @@ export interface Antenna {
   txDbm: number;
   cableLossDb: number;
   enabled: boolean;
+  mount?: AntennaMount; // attached to a truss member; position is then derived
 }
 
 export interface Truss {
   id: string;
   name: string;
-  position: Vec3; // centre of the arch at ground level
+  position: Vec3; // centre of the arch at its base (Y = base elevation)
   yawDeg: number;
   spanM: number; // clear width between uprights (centre to centre)
-  heightM: number; // height of crossbar centre
+  heightM: number; // height of crossbar centre above the base
   sectionM: number; // truss cross-section edge (e.g. 0.29)
+  followTrack: boolean; // base elevation follows the track surface under the arch
 }
 
-export type TrackShape = 'straight' | 'left' | 'right';
+export type TrussMember = 'left' | 'right' | 'top';
+
+export interface AntennaMount {
+  trussId: string;
+  member: TrussMember;
+  /** uprights: height above the truss base; crossbar: offset along the bar from its centre (+ = right) */
+  alongM: number;
+}
+
+export type SegmentKind = 'straight' | 'left' | 'right';
+
+export interface TrackSegment {
+  id: string;
+  kind: SegmentKind;
+  lengthM: number; // straight segments
+  radiusM: number; // turns: centreline radius
+  angleDeg: number; // turns: turn angle
+  riseM: number; // height change from start to end of the segment (+ = uphill)
+}
 
 export interface Track {
   widthM: number;
-  shape: TrackShape;
-  radiusM: number; // turn radius of the centreline
-  turnStartM: number; // arc-length position where the turn begins (negative = before the finish)
-  turnAngleDeg: number;
-  lengthBeforeM: number;
-  lengthAfterM: number;
+  startElevationM: number; // elevation at the start of the first segment
+  segments: TrackSegment[]; // in direction of travel
+  finishSegmentId: string; // segment that contains the finish line
+  finishOffsetM: number; // distance from the start of that segment to the finish line
+}
+
+export interface GroundSettings {
+  presetId: string; // 'custom' when edited
+  epsR: number; // relative permittivity
+  sigmaSm: number; // conductivity, S/m
+  roughnessM: number; // rms surface height variation (ruts, stones)
 }
 
 export interface EnvSettings {
   groundReflection: boolean;
-  groundGamma: number; // magnitude of reflection coefficient (phase = pi)
+  ground: GroundSettings;
   readerSensDbm: number;
   freqMHz: number;
   etsiLimitEirpDbm: number; // 2 W ERP = 35.15 dBm EIRP
@@ -100,7 +125,7 @@ export interface SimSettings {
 }
 
 export interface Setup {
-  version: 1;
+  version: 2;
   name: string;
   track: Track;
   trusses: Truss[];

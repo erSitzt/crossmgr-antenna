@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { makeDefaultSetup } from '../presets/templates';
+import { makeDefaultSetup, makeTrack } from '../presets/templates';
 import { computeZones, defaultVolume } from './grid';
 import { buildLinkCtx, eirpLinearDbm, evalLink } from './link';
 import { boresight, fsplDb, mulMat, rotYXZ } from './math';
 import { runPassSim, optimizePower } from './passSim';
 import { antennaGainDb } from './pattern';
 import { estimatePassTime, quadFit, type Read } from './regression';
-import { TrackPath } from './track';
+import { finishElevation, TrackPath } from './track';
+import { GROUND_PRESETS, groundReflection } from './ground';
+import { migrateSetup, normalizeSetup } from '../model/normalize';
 import type { Setup } from '../model/types';
 
 const prof = makeDefaultSetup().antennaProfiles[0];
@@ -40,6 +42,7 @@ function singleAntennaSetup(): Setup {
   const s = makeDefaultSetup();
   s.antennas = [{ ...s.antennas[0], position: [0, 1, 0], yawDeg: 0, pitchDeg: 0, txDbm: 30 }];
   s.tag = { ...s.tag, axis: 'isotropic', bodyLossDb: 0 };
+  s.env = { ...s.env, groundReflection: false };
   return s;
 }
 
@@ -66,15 +69,81 @@ describe('link budget', () => {
 });
 
 describe('track', () => {
-  it('finish at origin heading +X; left turn bends towards -Z', () => {
-    const s = makeDefaultSetup('left');
-    const p = new TrackPath(s.track);
+  it('finish at origin heading +X; turn after the finish bends left / right', () => {
+    const p = new TrackPath(makeTrack('beforeLeft'));
     const f = p.sample(0);
-    f.pos.forEach((v) => expect(Math.abs(v)).toBeLessThan(1e-9));
-    expect(f.dir[0]).toBeCloseTo(1, 9);
+    [f.pos[0], f.pos[2]].forEach((v) => expect(Math.abs(v)).toBeLessThan(1e-6));
+    expect(f.dir[0]).toBeCloseTo(1, 6);
     expect(p.sample(20).pos[2]).toBeLessThan(-1);
-    const r = new TrackPath(makeDefaultSetup('right').track);
-    expect(r.sample(20).pos[2]).toBeGreaterThan(1);
+    expect(new TrackPath(makeTrack('beforeRight')).sample(20).pos[2]).toBeGreaterThan(1);
+  });
+  it('right turn before the finish: riders arrive from +Z heading -Z, then turn right onto +X', () => {
+    const p = new TrackPath(makeTrack('afterRight'));
+    expect(p.sample(0).dir[0]).toBeCloseTo(1, 6);
+    const back = p.sample(-5 - 12 * (Math.PI / 2) - 5);
+    expect(back.pos[2]).toBeGreaterThan(8);
+    expect(back.dir[2]).toBeCloseTo(-1, 3);
+  });
+  it('elevation profile of the finish table', () => {
+    const t = makeTrack('tableAfterRight');
+    expect(finishElevation(t)).toBeCloseTo(1.2, 9);
+    const p = new TrackPath(t);
+    expect(p.elevation(0)).toBeCloseTo(1.2, 6);
+    expect(p.elevation(-4 - 5 - 20)).toBeCloseTo(0, 6); // before the ramp
+    expect(p.point(0, 2, 0.5)[1]).toBeCloseTo(1.7, 6);
+  });
+});
+
+describe('truss mounts and elevation', () => {
+  it('truss base follows the table, mounted antennas follow truss height', () => {
+    const s = makeDefaultSetup('tableAfterRight');
+    expect(s.trusses[0].position[1]).toBeCloseTo(1.2, 3);
+    const top = s.antennas.find((a) => a.mount?.member === 'top')!;
+    expect(top.position[1]).toBeLessThan(1.2 + 4.5);
+    expect(top.position[1]).toBeGreaterThan(1.2 + 4.2);
+    const s2 = normalizeSetup({ ...s, trusses: [{ ...s.trusses[0], heightM: 3.5 }] });
+    const top2 = s2.antennas.find((a) => a.id === top.id)!;
+    expect(top2.position[1] - top.position[1]).toBeCloseTo(-1, 3);
+    const low = s2.antennas.find((a) => a.mount?.member === 'left')!;
+    expect(low.position[1]).toBeCloseTo(1.2 + 0.7, 3);
+  });
+  it('migrates version-1 files', () => {
+    const v1 = {
+      version: 1, name: 'old', trusses: [{ id: 't', name: 'A', position: [0, 0, 0], yawDeg: 0, spanM: 9, heightM: 4.5, sectionM: 0.29 }],
+      antennas: [], antennaProfiles: [], readerProfile: makeDefaultSetup().readerProfile, tag: makeDefaultSetup().tag,
+      env: { groundReflection: false, groundGamma: 0.3, readerSensDbm: -70, freqMHz: 866.5, etsiLimitEirpDbm: 35.15 },
+      sim: makeDefaultSetup().sim,
+      track: { widthM: 8, shape: 'right', radiusM: 12, turnStartM: 3, turnAngleDeg: 90, lengthBeforeM: 25, lengthAfterM: 25 },
+    };
+    const s = migrateSetup(v1);
+    expect(s.version).toBe(2);
+    expect(s.track.segments.map((g) => g.kind)).toEqual(['straight', 'right', 'straight']);
+    expect(s.env.ground.epsR).toBeGreaterThan(1);
+    expect(new TrackPath(s.track).sample(20).pos[2]).toBeGreaterThan(1);
+  });
+});
+
+describe('ground reflection', () => {
+  const lambda = 0.346;
+  const mag = (g: [number, number]) => Math.hypot(g[0], g[1]);
+  it('approaches -1 at grazing incidence for any ground', () => {
+    for (const g of GROUND_PRESETS) {
+      const r = groundReflection({ ...g, roughnessM: 0 }, 0.001, 1, lambda);
+      expect(r[0]).toBeLessThan(-0.95);
+    }
+  });
+  it('wet clay reflects more than dry sand; vertical pol has a Brewster dip', () => {
+    const clay = GROUND_PRESETS.find((g) => g.presetId === 'clay-wet')!;
+    const sand = GROUND_PRESETS.find((g) => g.presetId === 'sand-dry')!;
+    const s45 = Math.sin(Math.PI / 4);
+    expect(mag(groundReflection(clay, s45, 1, lambda))).toBeGreaterThan(mag(groundReflection(sand, s45, 1, lambda)));
+    const brewster = Math.sin(Math.atan(1 / Math.sqrt(sand.epsR)));
+    expect(mag(groundReflection({ ...sand, roughnessM: 0 }, brewster, 0, lambda))).toBeLessThan(0.05);
+  });
+  it('roughness reduces the reflection', () => {
+    const g = GROUND_PRESETS[0];
+    const s = Math.sin(Math.PI / 4);
+    expect(mag(groundReflection({ ...g, roughnessM: 0.1 }, s, 1, lambda))).toBeLessThan(mag(groundReflection({ ...g, roughnessM: 0 }, s, 1, lambda)));
   });
 });
 

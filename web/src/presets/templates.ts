@@ -1,9 +1,10 @@
-import type { Antenna, Setup, TrackShape, Truss } from '../model/types';
+import { newId } from '../model/ids';
+import { normalizeSetup } from '../model/normalize';
+import type { Antenna, Setup, Track, TrackSegment, Truss } from '../model/types';
+import { GROUND_PRESETS } from '../rf/ground';
 import { ANTENNA_PROFILES, READER_PROFILES, TAG_PRESETS } from './profiles';
 
-let counter = 0;
-export const newId = (prefix: string) =>
-  `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`;
+export { newId };
 
 export function makeAntenna(partial: Partial<Antenna> & Pick<Antenna, 'port' | 'position'>): Antenna {
   return {
@@ -29,43 +30,84 @@ export function makeTruss(widthM: number): Truss {
     spanM: widthM + 1.2,
     heightM: 4.5,
     sectionM: 0.29,
+    followTrack: true,
   };
 }
 
-/** Default: 2 antennas on the left upright (low/high) pointing right, 1 overhead pointing down. */
-export function makeDefaultSetup(shape: TrackShape = 'straight'): Setup {
-  const width = 8;
-  const truss = makeTruss(width);
-  const leftZ = -truss.spanM / 2 + truss.sectionM;
-  return {
-    version: 1,
-    name: `New setup (${shape})`,
-    track: {
-      widthM: width,
-      shape,
-      radiusM: 12,
-      turnStartM: shape === 'straight' ? 0 : 3,
-      turnAngleDeg: 90,
-      lengthBeforeM: 25,
-      lengthAfterM: 25,
-    },
+export function makeSegment(kind: TrackSegment['kind'], p: Partial<TrackSegment> = {}): TrackSegment {
+  return { id: newId('seg'), kind, lengthM: 10, radiusM: 12, angleDeg: 90, riseM: 0, ...p };
+}
+
+export type TrackPreset =
+  | 'straight'
+  | 'afterLeft'
+  | 'afterRight'
+  | 'beforeLeft'
+  | 'beforeRight'
+  | 'tableAfterRight'
+  | 'tableAfterLeft';
+
+export const TRACK_PRESETS: { id: TrackPreset; label: string }[] = [
+  { id: 'straight', label: 'Straight' },
+  { id: 'afterRight', label: 'Finish after a right turn' },
+  { id: 'afterLeft', label: 'Finish after a left turn' },
+  { id: 'beforeRight', label: 'Finish before a right turn' },
+  { id: 'beforeLeft', label: 'Finish before a left turn' },
+  { id: 'tableAfterRight', label: 'Finish table after a 90° right turn' },
+  { id: 'tableAfterLeft', label: 'Finish table after a 90° left turn' },
+];
+
+export function makeTrack(preset: TrackPreset, widthM = 8): Track {
+  const S = (lengthM: number, riseM = 0) => makeSegment('straight', { lengthM, riseM });
+  const T = (kind: 'left' | 'right', radiusM = 12, angleDeg = 90) => makeSegment(kind, { radiusM, angleDeg });
+  const build = (segments: TrackSegment[], finishIndex: number, finishOffsetM: number): Track => ({
+    widthM,
+    startElevationM: 0,
+    segments,
+    finishSegmentId: segments[finishIndex].id,
+    finishOffsetM,
+  });
+  switch (preset) {
+    case 'straight':
+      return build([S(50)], 0, 25);
+    case 'afterLeft':
+    case 'afterRight':
+      return build([S(25), T(preset === 'afterLeft' ? 'left' : 'right'), S(30)], 2, 5);
+    case 'beforeLeft':
+    case 'beforeRight':
+      return build([S(30), T(preset === 'beforeLeft' ? 'left' : 'right'), S(25)], 0, 25);
+    case 'tableAfterLeft':
+    case 'tableAfterRight':
+      // approach, 90° turn, ramp up onto the finish table, table top (finish), ramp down, run-out
+      return build(
+        [S(25), T(preset === 'tableAfterLeft' ? 'left' : 'right', 10), S(5, 1.2), S(14), S(5, -1.2), S(20)],
+        3,
+        4,
+      );
+  }
+}
+
+/** Default: finish arch with 2 antennas on the left upright (low/high) pointing right and 1 overhead pointing down. */
+export function makeDefaultSetup(preset: TrackPreset = 'straight'): Setup {
+  const track = makeTrack(preset);
+  const truss = makeTruss(track.widthM);
+  const mount = (member: 'left' | 'right' | 'top', alongM: number) => ({ trussId: truss.id, member, alongM });
+  return normalizeSetup({
+    version: 2,
+    name: `New setup (${TRACK_PRESETS.find((p) => p.id === preset)?.label ?? preset})`,
+    track,
     trusses: [truss],
     antennas: [
-      makeAntenna({ port: 1, name: 'Left low', position: [0, 0.7, leftZ], yawDeg: 0, pitchDeg: 0 }),
-      makeAntenna({ port: 2, name: 'Left high', position: [0, 1.8, leftZ], yawDeg: 0, pitchDeg: 15 }),
-      makeAntenna({
-        port: 3,
-        name: 'Top centre',
-        position: [0, truss.heightM - truss.sectionM, 0],
-        pitchDeg: 90,
-      }),
+      makeAntenna({ port: 1, name: 'Left low', position: [0, 0, 0], mount: mount('left', 0.7) }),
+      makeAntenna({ port: 2, name: 'Left high', position: [0, 0, 0], pitchDeg: 15, mount: mount('left', 1.8) }),
+      makeAntenna({ port: 3, name: 'Top centre', position: [0, 0, 0], pitchDeg: 90, mount: mount('top', 0) }),
     ],
     antennaProfiles: ANTENNA_PROFILES.map((p) => ({ ...p })),
     readerProfile: { ...READER_PROFILES[0] },
     tag: { ...TAG_PRESETS[1] },
     env: {
-      groundReflection: false,
-      groundGamma: 0.3,
+      groundReflection: true,
+      ground: { ...GROUND_PRESETS[0] },
       readerSensDbm: -70,
       freqMHz: 866.5,
       etsiLimitEirpDbm: 35.15,
@@ -80,5 +122,5 @@ export function makeDefaultSetup(shape: TrackShape = 'straight'): Setup {
       method: 'quadratic',
       seed: 1,
     },
-  };
+  });
 }

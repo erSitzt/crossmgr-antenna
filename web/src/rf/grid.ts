@@ -1,6 +1,7 @@
 import type { Setup, Vec3 } from '../model/types';
 import { buildLinkCtx, evalLink, tagAxisWorld } from './link';
 import { surfaceNets } from './surfaceNets';
+import { finishElevation } from './track';
 
 export interface VolumeSpec {
   origin: Vec3;
@@ -11,16 +12,24 @@ export interface VolumeSpec {
 /** Region around the finish line that covers the track width plus side margins. */
 export function defaultVolume(setup: Setup, step = 0.2): VolumeSpec {
   const halfW = setup.track.widthM / 2 + 4;
-  const xMin = -14, xMax = 14, yMax = 5.5;
+  const xMin = -14, xMax = 14;
+  const [yMin, yMax] = verticalRange(setup);
   return {
-    origin: [xMin, 0, -halfW],
+    origin: [xMin, yMin, -halfW],
     step,
     dims: [
       Math.round((xMax - xMin) / step) + 1,
-      Math.round(yMax / step) + 1,
+      Math.round((yMax - yMin) / step) + 1,
       Math.round((2 * halfW) / step) + 1,
     ],
   };
+}
+
+/** Vertical extent of the field views: from just below the finish surface to above the arch. */
+export function verticalRange(setup: Setup): [number, number] {
+  const fe = finishElevation(setup.track);
+  const top = Math.max(fe + 5.5, ...setup.trusses.map((t) => t.position[1] + t.heightM + 0.5));
+  return [Math.min(0, fe - 0.5), top];
 }
 
 // For the field views the tag is assumed to travel along +X (straight through the finish).
@@ -54,7 +63,7 @@ export function computeZones(setup: Setup, vol: VolumeSpec): ZoneMesh[] {
 
 export interface SliceSpec {
   kind: 'horizontal' | 'finish';
-  /** horizontal: height (Y). finish: X position of the vertical plane. */
+  /** horizontal: absolute elevation (Y). finish: X position of the vertical plane. */
   at: number;
   step: number;
 }
@@ -80,7 +89,8 @@ export function computeSlice(setup: Setup, spec: SliceSpec): SliceData {
   if (spec.kind === 'horizontal') {
     uMin = -14; uLen = 28; vMin = -halfW; vLen = 2 * halfW;
   } else {
-    uMin = -halfW; uLen = 2 * halfW; vMin = 0; vLen = 5.5;
+    const [yMin, yMax] = verticalRange(setup);
+    uMin = -halfW; uLen = 2 * halfW; vMin = yMin; vLen = yMax - yMin;
   }
   const nu = Math.round(uLen / spec.step) + 1;
   const nv = Math.round(vLen / spec.step) + 1;

@@ -68,7 +68,7 @@ function simulatePass(
     const noise = rng.gauss() * sim.rssiNoiseDb;
     const protocolOk = rng.next() < 0.9;
     const smp = path.sample(v * t);
-    const pos: Vec3 = [smp.pos[0] + smp.right[0] * lateral, tag.heightM, smp.pos[2] + smp.right[2] * lateral];
+    const pos: Vec3 = [smp.pos[0] + smp.right[0] * lateral, smp.pos[1] + tag.heightM, smp.pos[2] + smp.right[2] * lateral];
     const res = evalLink(ctx, a, pos, tagAxisWorld(tag.axis, smp.dir, smp.right));
     if (protocolOk && res.margin + noise > 0) {
       reads.push({ t, port: a.antenna.port, antennaId: a.antenna.id, rssi: Math.round(res.rssiDbm + noise) });
@@ -148,7 +148,7 @@ export function peakRssiAlongLane(setup: Setup, lateral: number): Record<number,
   const out: Record<number, number> = {};
   for (let s = -setup.sim.rangeM; s <= setup.sim.rangeM; s += 0.1) {
     const smp = path.sample(s);
-    const pos: Vec3 = [smp.pos[0] + smp.right[0] * lateral, setup.tag.heightM, smp.pos[2] + smp.right[2] * lateral];
+    const pos: Vec3 = [smp.pos[0] + smp.right[0] * lateral, smp.pos[1] + setup.tag.heightM, smp.pos[2] + smp.right[2] * lateral];
     const axis = tagAxisWorld(setup.tag.axis, smp.dir, smp.right);
     for (const a of ctx.antennas) {
       const r = evalLink(ctx, a, pos, axis);

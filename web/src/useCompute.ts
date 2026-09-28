@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { finishElevation } from './rf/track';
 import { computeSliceAsync, computeZonesAsync, runSimAsync } from './rf/workerClient';
 import { useStore } from './store';
 
@@ -18,7 +19,7 @@ export function useCompute() {
       try {
         const [zones, sliceH, sliceF] = await Promise.all([
           view.showZones ? computeZonesAsync(setup, view.zoneStep) : Promise.resolve([]),
-          view.showHorizontal ? computeSliceAsync(setup, { kind: 'horizontal', at: view.sliceHeight, step: 0.1 }) : Promise.resolve(null),
+          view.showHorizontal ? computeSliceAsync(setup, { kind: 'horizontal', at: finishElevation(setup.track) + view.sliceHeight, step: 0.1 }) : Promise.resolve(null),
           view.showFinishSlice ? computeSliceAsync(setup, { kind: 'finish', at: 0, step: 0.05 }) : Promise.resolve(null),
         ]);
         if (my === gen.current) setFields({ zones, sliceH, sliceF, computing: false });

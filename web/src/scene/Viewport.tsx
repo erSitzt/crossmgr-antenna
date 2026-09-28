@@ -2,7 +2,9 @@ import { GizmoHelper, GizmoViewport, Grid, OrbitControls, TransformControls } fr
 import { Canvas, useThree } from '@react-three/fiber';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { alongFromPosition } from '../model/normalize';
 import { eirpLinearDbm } from '../rf/link';
+import { finishElevation } from '../rf/track';
 import { DEG } from '../rf/math';
 import { useStore } from '../store';
 import { AntennaMesh } from './AntennaMesh';
@@ -19,14 +21,15 @@ export type CameraPreset = 'perspective' | 'top' | 'side' | 'rider';
 function CameraRig({ preset, nonce }: { preset: CameraPreset; nonce: number }) {
   const { camera, controls } = useThree();
   useEffect(() => {
-    const target = new THREE.Vector3(0, 1, 0);
+    const fy = finishElevation(useStore.getState().setup.track);
+    const target = new THREE.Vector3(0, fy + 1, 0);
     const positions: Record<CameraPreset, [number, number, number]> = {
       perspective: [-12, 9, 14],
       top: [0, 26, 0.01],
       side: [0, 2, 16],
       rider: [-12, 1.6, 0],
     };
-    camera.position.set(...positions[preset]);
+    camera.position.set(positions[preset][0], positions[preset][1] + fy, positions[preset][2]);
     const oc = controls as unknown as { target: THREE.Vector3; update: () => void } | null;
     if (oc) {
       oc.target.copy(target);
@@ -69,15 +72,20 @@ function SceneContent() {
     if (!target || !selectedId) return;
     const p = target.position;
     if (isTruss) {
-      updateTruss(selectedId, { position: [r1(p.x), 0, r1(p.z)], yawDeg: d1(target.rotation.y / DEG) });
+      const t = setup.trusses.find((x) => x.id === selectedId)!;
+      updateTruss(selectedId, { position: [r1(p.x), t.position[1], r1(p.z)], yawDeg: d1(target.rotation.y / DEG) });
     } else {
+      const ant = setup.antennas.find((a) => a.id === selectedId);
       const e = new THREE.Euler().setFromQuaternion(target.quaternion, 'YXZ');
-      updateAntenna(selectedId, {
-        position: [r1(p.x), r1(Math.max(p.y, 0)), r1(p.z)],
-        yawDeg: d1(e.y / DEG),
-        pitchDeg: d1(e.x / DEG),
-        rollDeg: d1(e.z / DEG),
-      });
+      const rot = { yawDeg: d1(e.y / DEG), pitchDeg: d1(e.x / DEG), rollDeg: d1(e.z / DEG) };
+      const truss = ant?.mount && setup.trusses.find((t) => t.id === ant.mount!.trussId);
+      if (ant?.mount && truss) {
+        // mounted: translation slides the antenna along its truss member
+        const alongM = r1(alongFromPosition(truss, ant.mount.member, [p.x, p.y, p.z]));
+        updateAntenna(selectedId, mode === 'translate' ? { mount: { ...ant.mount, alongM } } : rot);
+      } else {
+        updateAntenna(selectedId, { position: [r1(p.x), r1(p.y), r1(p.z)], ...rot });
+      }
     }
   };
 
@@ -87,7 +95,7 @@ function SceneContent() {
       <directionalLight position={[10, 20, 5]} intensity={1.2} castShadow />
       <Grid args={[80, 80]} cellSize={1} sectionSize={5} infiniteGrid fadeDistance={70} cellColor="#3a3f47" sectionColor="#58606b" />
       <TrackMesh track={setup.track} />
-      <FinishPlane width={setup.track.widthM + 2} />
+      <FinishPlane width={setup.track.widthM + 2} y={finishElevation(setup.track)} />
       {setup.trusses.map((t) => (
         <TrussMesh key={t.id} ref={setRef(t.id)} truss={t} selected={t.id === selectedId} onSelect={(e) => { e.stopPropagation(); select(t.id); }} />
       ))}

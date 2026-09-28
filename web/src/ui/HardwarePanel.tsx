@@ -1,6 +1,8 @@
-import type { Antenna, TagAxis, Truss } from '../model/types';
+import type { Antenna, TagAxis, Truss, TrussMember } from '../model/types';
 import { READER_PROFILES, TAG_PRESETS } from '../presets/profiles';
+import { GROUND_PRESETS, groundReflection } from '../rf/ground';
 import { eirpLinearDbm } from '../rf/link';
+import { wavelength } from '../rf/math';
 import { portColor, useStore } from '../store';
 import { Check, NumField, Section, Select } from './controls';
 
@@ -88,11 +90,48 @@ function AntennaProps({ a }: { a: Antenna }) {
         onChange={(v) => u({ port: +v })}
       />
       <Select label="Model" value={a.profileId} options={setup.antennaProfiles.map((p) => ({ value: p.id, label: p.name }))} onChange={(profileId) => u({ profileId })} />
-      <div className="grid3">
-        <NumField label="X (along)" unit="m" value={a.position[0]} step={0.05} onChange={(x) => u({ position: [x, a.position[1], a.position[2]] })} />
-        <NumField label="Y (height)" unit="m" value={a.position[1]} step={0.05} min={0} onChange={(y) => u({ position: [a.position[0], y, a.position[2]] })} />
-        <NumField label="Z (across)" unit="m" value={a.position[2]} step={0.05} onChange={(z) => u({ position: [a.position[0], a.position[1], z] })} />
-      </div>
+      <Select
+        label="Mounted on"
+        value={a.mount ? `${a.mount.trussId}|${a.mount.member}` : ''}
+        options={[
+          { value: '', label: 'Free (own stand / pole)' },
+          ...setup.trusses.flatMap((t) =>
+            (['left', 'right', 'top'] as TrussMember[]).map((m) => ({
+              value: `${t.id}|${m}`,
+              label: `${t.name} – ${m === 'top' ? 'crossbar' : `${m} upright`}`,
+            })),
+          ),
+        ]}
+        onChange={(v) => {
+          if (!v) return u({ mount: undefined });
+          const [trussId, member] = v.split('|') as [string, TrussMember];
+          const t = setup.trusses.find((x) => x.id === trussId)!;
+          const alongM = member === 'top' ? 0 : Math.min(Math.max(a.position[1] - t.position[1], 0.3), t.heightM);
+          const aim = member === 'top' ? { pitchDeg: 90 } : member === 'left' ? { yawDeg: 0 } : { yawDeg: 180 };
+          u({ mount: { trussId, member, alongM }, ...(a.mount ? {} : aim) });
+        }}
+      />
+      {a.mount ? (
+        <>
+          <NumField
+            label={a.mount.member === 'top' ? 'Offset on bar' : 'Height on upright'}
+            unit="m"
+            value={a.mount.alongM}
+            step={0.05}
+            title={a.mount.member === 'top' ? 'Distance from the crossbar centre, + = right side' : 'Height above the truss base'}
+            onChange={(alongM) => u({ mount: { ...a.mount!, alongM } })}
+          />
+          <p className="mounted">
+            Position {a.position.map((v) => v.toFixed(2)).join(' / ')} m (follows the truss). Move gizmo slides along the member.
+          </p>
+        </>
+      ) : (
+        <div className="grid3">
+          <NumField label="X (along)" unit="m" value={a.position[0]} step={0.05} onChange={(x) => u({ position: [x, a.position[1], a.position[2]] })} />
+          <NumField label="Y (elevation)" unit="m" value={a.position[1]} step={0.05} onChange={(y) => u({ position: [a.position[0], y, a.position[2]] })} />
+          <NumField label="Z (across)" unit="m" value={a.position[2]} step={0.05} onChange={(z) => u({ position: [a.position[0], a.position[1], z] })} />
+        </div>
+      )}
       <div className="grid3">
         <NumField label="Yaw" unit="°" value={a.yawDeg} step={5} title="0 = pointing to +Z (from left side across the track), 180 = pointing to -Z, -90 = towards approaching riders" onChange={(yawDeg) => u({ yawDeg })} />
         <NumField label="Tilt down" unit="°" value={a.pitchDeg} step={5} min={-90} max={90} title="0 = horizontal, 90 = pointing straight down" onChange={(pitchDeg) => u({ pitchDeg })} />
@@ -125,16 +164,20 @@ function TrussProps({ t }: { t: Truss }) {
         <input value={t.name} onChange={(e) => u({ name: e.target.value })} />
       </label>
       <div className="grid3">
-        <NumField label="X" unit="m" value={t.position[0]} step={0.1} onChange={(x) => u({ position: [x, 0, t.position[2]] })} />
-        <NumField label="Z" unit="m" value={t.position[2]} step={0.1} onChange={(z) => u({ position: [t.position[0], 0, z] })} />
+        <NumField label="X" unit="m" value={t.position[0]} step={0.1} onChange={(x) => u({ position: [x, t.position[1], t.position[2]] })} />
+        <NumField label="Z" unit="m" value={t.position[2]} step={0.1} onChange={(z) => u({ position: [t.position[0], t.position[1], z] })} />
         <NumField label="Yaw" unit="°" value={t.yawDeg} step={5} onChange={(yawDeg) => u({ yawDeg })} />
       </div>
       <div className="grid3">
         <NumField label="Span" unit="m" value={t.spanM} min={1} step={0.5} onChange={(spanM) => u({ spanM })} />
-        <NumField label="Height" unit="m" value={t.heightM} min={1} step={0.25} onChange={(heightM) => u({ heightM })} />
+        <NumField label="Clear height" unit="m" value={t.heightM} min={1} step={0.1} onChange={(heightM) => u({ heightM })} />
         <NumField label="Section" unit="m" value={t.sectionM} min={0.1} max={0.6} step={0.01} onChange={(sectionM) => u({ sectionM })} />
       </div>
-      <p className="muted">Antennas are placed independently; use the Z/Y fields to line them up with the truss members.</p>
+      <Check label="Base follows track elevation" value={t.followTrack} onChange={(followTrack) => u({ followTrack })} />
+      {!t.followTrack && (
+        <NumField label="Base elevation" unit="m" value={t.position[1]} step={0.1} onChange={(y) => u({ position: [t.position[0], y, t.position[2]] })} />
+      )}
+      <p className="muted">Antennas mounted on this truss follow when you change height, span or position.</p>
     </Section>
   );
 }
@@ -190,7 +233,23 @@ function TagAndRf() {
       </div>
       <Check label="Ground reflection (two-ray multipath)" value={env.groundReflection} onChange={(groundReflection) => updateEnv({ groundReflection })} />
       {env.groundReflection && (
-        <NumField label="Ground |Γ|" value={env.groundGamma} min={0} max={1} step={0.05} onChange={(groundGamma) => updateEnv({ groundGamma })} />
+        <>
+          <Select
+            label="Ground type"
+            value={GROUND_PRESETS.some((g) => g.presetId === env.ground.presetId) ? env.ground.presetId : 'custom'}
+            options={[...GROUND_PRESETS.map((g) => ({ value: g.presetId, label: g.name })), { value: 'custom', label: 'Custom' }]}
+            onChange={(id) => {
+              const g = GROUND_PRESETS.find((x) => x.presetId === id);
+              if (g) updateEnv({ ground: { presetId: g.presetId, epsR: g.epsR, sigmaSm: g.sigmaSm, roughnessM: g.roughnessM } });
+            }}
+          />
+          <div className="grid3">
+            <NumField label="Permittivity εr" value={env.ground.epsR} min={1} max={81} step={0.5} title="Relative permittivity – rises strongly with moisture" onChange={(epsR) => updateEnv({ ground: { ...env.ground, epsR, presetId: 'custom' } })} />
+            <NumField label="Conductivity" unit="S/m" value={env.ground.sigmaSm} min={0} max={5} step={0.005} onChange={(sigmaSm) => updateEnv({ ground: { ...env.ground, sigmaSm, presetId: 'custom' } })} />
+            <NumField label="Roughness" unit="m" value={env.ground.roughnessM} min={0} max={0.5} step={0.01} title="RMS height variation (ruts, stones). Rough ground scatters instead of mirroring." onChange={(roughnessM) => updateEnv({ ground: { ...env.ground, roughnessM, presetId: 'custom' } })} />
+          </div>
+          <GroundHint />
+        </>
       )}
     </Section>
   );
@@ -229,5 +288,18 @@ function Profiles() {
         </details>
       ))}
     </Section>
+  );
+}
+
+/** Shows |Γ| for typical geometries so the effect of the ground type is visible at a glance. */
+function GroundHint() {
+  const env = useStore((s) => s.setup.env);
+  const lambda = wavelength(env.freqMHz);
+  const at = (deg: number, wTE: number) => Math.hypot(...groundReflection(env.ground, Math.sin((deg * Math.PI) / 180), wTE, lambda));
+  return (
+    <p className="muted">
+      Reflection |Γ| at 10° / 45° grazing: horizontal pol. {at(10, 1).toFixed(2)} / {at(45, 1).toFixed(2)}, vertical pol.{' '}
+      {at(10, 0).toFixed(2)} / {at(45, 0).toFixed(2)}. Reflection is taken off the track surface at the finish.
+    </p>
   );
 }

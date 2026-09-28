@@ -1,6 +1,8 @@
 import type { Antenna, AntennaProfile, EnvSettings, Setup, TagAxis, TagProfile, Vec3 } from '../model/types';
 import { dbToLin, linToDb, mulMatT, rotYXZ, wavelength, type Mat3 } from './math';
+import { groundReflection } from './ground';
 import { antennaGainDb, tagGainDb } from './pattern';
+import { finishElevation } from './track';
 
 /** Precomputed per-antenna state for fast link evaluation. */
 export interface AntennaCtx {
@@ -16,6 +18,7 @@ export interface LinkCtx {
   env: EnvSettings;
   lambda: number;
   k: number;
+  groundY: number; // reflecting ground plane (track surface at the finish)
 }
 
 export function buildLinkCtx(setup: Setup, overrides?: { txDbm?: Record<string, number> }): LinkCtx {
@@ -28,7 +31,7 @@ export function buildLinkCtx(setup: Setup, overrides?: { txDbm?: Record<string, 
       const antenna = tx === undefined ? a : { ...a, txDbm: tx };
       return { antenna, profile, rot: rotYXZ(a.yawDeg, a.pitchDeg, a.rollDeg), pos: a.position };
     });
-  return { antennas, tag: setup.tag, env: setup.env, lambda, k: (2 * Math.PI) / lambda };
+  return { antennas, tag: setup.tag, env: setup.env, lambda, k: (2 * Math.PI) / lambda, groundY: finishElevation(setup.track) };
 }
 
 export function tagAxisWorld(axis: TagAxis, dir: Vec3, right: Vec3): Vec3 {
@@ -70,11 +73,26 @@ export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, axisW: Ve
   };
   const direct = path(a.pos, tagPos, false);
   if (!env.groundReflection) return direct.amp * direct.amp;
-  const image: Vec3 = [a.pos[0], -a.pos[1], a.pos[2]];
+  const hA = a.pos[1] - ctx.groundY, hT = tagPos[1] - ctx.groundY;
+  if (hA <= 0 || hT <= 0) return direct.amp * direct.amp;
+  const image: Vec3 = [a.pos[0], 2 * ctx.groundY - a.pos[1], a.pos[2]];
   const refl = path(image, tagPos, true);
-  const g = env.groundGamma;
-  const re = direct.amp * Math.cos(direct.phase) - g * refl.amp * Math.cos(refl.phase);
-  const im = direct.amp * Math.sin(direct.phase) - g * refl.amp * Math.sin(refl.phase);
+  const dx = tagPos[0] - a.pos[0], dz = tagPos[2] - a.pos[2];
+  const dh = Math.hypot(dx, dz);
+  const d2 = Math.hypot(dh, hA + hT);
+  // share of the tag field perpendicular to the plane of incidence (horizontal polarisation)
+  let wTE = 0.5;
+  if (tag.axis !== 'isotropic') {
+    if (dh < 1e-6) wTE = Math.hypot(axisW[0], axisW[2]) ** 2;
+    else {
+      const n = [dz / dh, -dx / dh]; // horizontal normal of the plane of incidence
+      wTE = (axisW[0] * n[0] + axisW[2] * n[1]) ** 2 / Math.max(1e-9, axisW[0] ** 2 + axisW[1] ** 2 + axisW[2] ** 2);
+    }
+  }
+  const [gr, gi] = groundReflection(env.ground, (hA + hT) / d2, wTE, lambda);
+  const cr = Math.cos(refl.phase), ci = Math.sin(refl.phase);
+  const re = direct.amp * Math.cos(direct.phase) + refl.amp * (gr * cr - gi * ci);
+  const im = direct.amp * Math.sin(direct.phase) + refl.amp * (gr * ci + gi * cr);
   return re * re + im * im;
 }
 
