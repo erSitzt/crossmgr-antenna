@@ -117,13 +117,23 @@ async function setField(label, value) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scenario: finish table after a 90° right turn (the default example of the manual)
-await act(() => {
-  const s = window.store.getState();
-  s.newFromTemplate('tableAfterRight');
-  s.updateEnv({ readerSensDbm: -80 });
-  s.setView({ bikeS: -1.5 });
-});
+// Scenario: finish table after a 90° right turn with the layout-search result
+// (one antenna low on each upright, 15° down) – the example used throughout the manual
+async function newScenario() {
+  await act(() => {
+    const s = window.store.getState();
+    s.newFromTemplate('tableAfterRight');
+    const st = window.store.getState();
+    const truss = st.setup.trusses[0].id;
+    const a0 = st.setup.antennas[0];
+    const mk = (port, name, member, alongM, yawDeg, txDbm) => ({
+      ...a0, id: `ant-best-${port}`, port, name, yawDeg, pitchDeg: 15, rollDeg: 0, txDbm, mount: { trussId: truss, member, alongM },
+    });
+    st.replaceAntennas([mk(1, 'Right low', 'right', 0.4, 180, 27.5), mk(2, 'Left low', 'left', 0.4, 0, 28)]);
+    window.store.getState().setView({ bikeS: -1.5 });
+  });
+}
+await newScenario();
 await settle(1500);
 await act(() => window.store.getState().setSim({ selectedLane: 3 }));
 
@@ -153,8 +163,7 @@ await act(() => {
 await settle();
 await camera([-10, 38, 0.01], [-10, 0, 0]);
 await viewport('track-width-top.png');
-await act(() => window.store.getState().newFromTemplate('tableAfterRight'));
-await act(() => window.store.getState().updateEnv({ readerSensDbm: -80 }));
+await newScenario();
 await settle();
 
 // Antennas: selection + gizmo + properties
@@ -166,7 +175,7 @@ await act(() => {
   s.setTransformMode('rotate');
 });
 await settle();
-await camera([-3.5, 3.2, -8.5], [0, 2.2, -4]);
+await camera([-3.5, 2.8, -8.5], [0, 1.7, -4]);
 await viewport('antenna-gizmo.png');
 await section('antenna-props.png', 'Antenna P2');
 await section('scene-objects.png', 'Scene objects');

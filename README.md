@@ -3,7 +3,7 @@
 Plan, simulate and tune UHF RFID finish-line antennas for motocross timing with
 [CrossMgrImpinj](https://github.com/esitarski/CrossMgr/tree/master/CrossMgrImpinj) and crossmgr-interface.
 
-![Overview: finish table after a 90° right turn, three antennas on the arch, read zones, rider and tag links](docs/images/overview.png)
+![Overview: finish table after a 90° right turn, one antenna low on each upright (layout-search result), read zones, rider and tag links](docs/images/overview.png)
 
 You build the finish area in 3D: track with turns, ramps and a finish table, the aluminium finish arch, antennas, obstacles, the bike and its tags. The planner then shows:
 
@@ -81,7 +81,7 @@ Everything recalculates automatically, about 0.2 s after the last change. The se
 
 ## 3. Tutorial: planning a finish table after a right turn
 
-This walkthrough uses the example the screenshots show. The finish arch stands on a 1.2 m high finish table directly after a 90° right turn. Two antennas are on the left upright, one hangs from the crossbar. Riders carry an Avery Dennison Dogbone (Impinj M730) on the left fork leg.
+This walkthrough uses the example the screenshots show. The finish arch stands on a 1.2 m high finish table directly after a 90° right turn. Riders carry an Avery Dennison Dogbone (Impinj M730) on the left fork leg. The preset starts with three antennas (two on the left upright, one on the crossbar). The screenshots show the result of the layout search in step 7: one antenna low on each upright (0.4 m above the base, aimed across, 15° down, 27.5 / 28 dBm).
 
 **Step 1 – Track.** *Track & view* → preset *Finish table after a 90° right turn* → **New setup**. The track is approach → right turn (R 10 m) → 5 m ramp up +1.2 m → 14 m table (finish 4 m in) → ramp down → run-out.
 
@@ -99,7 +99,17 @@ Adjust lengths, radius, heights and widths to your venue (see [4.2](#42-track-se
 
 **Step 6 – Simulate.** *Simulation* → check the **Virtual wall**. The goal is 0 % missed, mean offset close to 0 and a small spread, also for the corner-cut line (riders coming in on the right edge and crossing next to the left antennas).
 
-**Step 7 – Optimise.** **Optimise power** tunes the current layout; **Find best layout** also moves antennas on the arch. Apply what you like.
+**Step 7 – Optimise.** **Optimise power** tunes the current layout; **Find best layout** also moves antennas on the arch. Apply what you like. For this example the search gave (1–4 antennas, full search):
+
+| Antennas | Score | Missed | Offset | Spread | Worst line |
+| --- | --- | --- | --- | --- | --- |
+| Preset (3 antennas) | 40.1 | 0 % | −5 cm | 21 cm | 27 cm |
+| 1 | 20.7 | 0 % | −4 cm | 10 cm | 15 cm |
+| **2 (best)** | **10.0** | **0 %** | **+1 cm** | **6 cm** | **5 cm** |
+| 3 | 10.5 | 0 % | −1 cm | 8 cm | 5 cm |
+| 4 | 13.8 | 0 % | −1 cm | 11 cm | 5 cm |
+
+Two and three antennas are effectively tied; three give a spare antenna for racing.
 
 **Step 8 – At the track.** Stop CrossMgrImpinj, connect the planner to the reader, push the antenna config and walk or ride a test tag through marked lanes. The **Calibration** table corrects the model (see [8.2](#82-at-the-track-calibration)). Re-optimise, then enter the final per-port powers in CrossMgrImpinj.
 
@@ -171,10 +181,10 @@ Example of changing widths: a 6 m approach, tapering to a 10 m finish table, tap
 | Red – Tag not powered | the forward link is too weak: not enough power reaches the tag | more Tx power, closer / better aimed antenna |
 | Blue – Reply too weak | the tag answers, but below the reader's Rx sensitivity | better Rx sensitivity, less cable loss, closer antenna |
 
-Example: the default layout (two antennas on the left upright, one on the crossbar; top view, rider's left at the top), with pessimistic values (Rx −70 dBm, 10 dB bike shadow, left) and with the defaults (Rx −80 dBm, 6 dB, right).
+Example: the layout-search result (one antenna low on each upright; top view, rider's left at the top), with pessimistic values (Rx −70 dBm, 10 dB bike shadow, left) and with the defaults (Rx −80 dBm, 6 dB, right).
 
-- **Pessimistic values:** the readable area (green) stays near the left upright. Around it, the tag mounting is the limit (violet): the fork tag sits 15 mm from the metal tube (4.5 dB each way), leans 27° back, and is weak towards the overhead antenna. Further out the reply is too weak (blue).
-- **Defaults:** the readable area covers most of the table. The violet ring shows that a better-mounted tag (more spacing from metal) would extend it further; beyond that the tag is not powered (red).
+- **Pessimistic values:** there is a gap under the arch. The left antenna reads the left half. The right antenna only reads right next to itself, because the left-fork tag is shadowed towards it by fork, wheel and engine, so most of the right half is violet (tag mounting). Further out the reply is too weak (blue).
+- **Defaults:** the readable area covers the whole track width at the finish. The violet ring shows where a better-mounted tag (more spacing from metal, no shadow) would still be read; beyond it the tag is not powered (red).
 
 | Rx −70 dBm, 10 dB shadow | Rx −80 dBm, 6 dB shadow (defaults) |
 | --- | --- |
@@ -479,7 +489,7 @@ For every closed pass with a marked lane, each port's measured peak RSSI is comp
 - **Measured − model**: mean difference per port.
 - **Suggested cable loss**: the offset folded into the antenna's loss (RSSI counts it twice, so the loss changes by −offset / 2). **Apply** sets it.
 
-In the example above, the simulated reader had 3 dB extra loss on port 2. Calibration found −5.6 dB RSSI and suggests 3.8 dB cable loss (true: 4.0 dB); ports 1 and 3 stay near 0.
+In the example above, the simulated reader had 3 dB extra loss on port 2. Calibration found −5.9 dB RSSI and suggests 4.0 dB cable loss (true: 4.0 dB); port 1 stays near 0.
 
 ---
 
@@ -538,9 +548,9 @@ The tag gain includes the dipole pattern: sin² of the angle between dipole axis
 
 ## 10. Reading the results – lessons learned
 
-These came out of the finish-table example and are worth checking for your own setup:
+These came out of the finish-table example and are worth checking for your own setup. The metal and two-tag numbers were measured with the preset's three antennas, before the layout search; the effects are the same with the optimised layout.
 
-- **Receiver sensitivity is often the limit.** The tag gets enough power, but its reply is below the reader's Rx threshold (blue in *What limits the read*). With the example, Rx −70 dBm gave 25 % missed passes; −80 dBm (the default) gave 0 % and halved the spread. Check what CrossMgrImpinj uses.
+- **Receiver sensitivity is often the limit.** The tag gets enough power, but its reply is below the reader's Rx threshold (blue in *What limits the read*). With the preset's three antennas, Rx −70 dBm gave 25 % missed passes; −80 dBm (the default) gave 0 % and halved the spread. Check what CrossMgrImpinj uses.
 - **Small zones or a gap under the arch?** Switch the heatmap to *What limits the read*. Violet means the tag mounting (orientation, bike shadow, metal) is the cause; moving antennas or aiming them differently helps more than power.
 - **Metal kills dipole inlays.** A Dogbone directly on the fork tube missed 100 % of passes; on the fork guard (15 mm) 0 %, with 92 reads per pass; at 40 mm 172 reads.
 - **Orientation matters.** An antenna looking along the tag's dipole barely reads it. The overhead antenna got **no** reads from a vertical fork tag, but 30–66 reads per pass from a horizontal tag.
@@ -556,7 +566,7 @@ These came out of the finish-table example and are worth checking for your own s
   | Fork tag on metal + helmet | 0 % | +37 cm | 43 cm |
 
   A constant offset treats every rider the same and can be removed by moving the virtual wall; a large spread cannot. With two tags, *strongest antenna* was clearly better.
-- **More antennas are not automatically better.** Port switching shares the read time. In the example the best layout had two antennas (one per upright), not three or four.
+- **More antennas are not automatically better.** Port switching shares the read time. In the example the best layout had two antennas low on each upright (score 10.0), three were equal within noise (10.5) and four worse (13.8). The overhead antenna never made it into the result, because it looks along the fork tag's vertical dipole.
 - **Test the corner-cut line.** Riders coming in on the far edge and crossing next to one side's antennas are the typical weak spot after a turn.
 
 ---
