@@ -7,7 +7,7 @@ import { makeAntenna, makeDefaultSetup, makeSegment, makeTrack, makeTruss, newId
 import type { SliceData, ZoneMesh } from './rf/grid';
 import type { OptimizeProgress, SimResult } from './rf/passSim';
 
-export type SliceMode = 'margin' | 'rssi' | 'overlap' | 'dominant';
+export type SliceMode = 'margin' | 'rssi' | 'overlap' | 'dominant' | 'limit';
 export type TransformMode = 'translate' | 'rotate';
 
 export interface ViewSettings {

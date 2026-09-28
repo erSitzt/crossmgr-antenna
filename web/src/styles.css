@@ -108,3 +108,6 @@ button.link:hover { text-decoration: underline; }
 .layout-list li { padding: 2px 0; }
 .credits a { color: var(--accent); }
 .subhead { margin: 8px 0 2px; font-weight: 600; color: var(--text); }
+.legend-list { list-style: none; padding: 0; margin: 4px 0 8px; font-size: 12px; }
+.legend-list li { margin: 3px 0; }
+.viewport-legend { top: 10px; right: 10px; left: auto; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 12px; }

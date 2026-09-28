@@ -54,6 +54,15 @@ function ramp(t: number): [number, number, number] {
 }
 const OVERLAP = ['#000000', '#4c78a8', '#54a24b', '#f58518', '#e45756'];
 
+/** Colours and labels of the "What limits the read" mode, indexed by LIMIT code. */
+export const LIMIT_LEGEND: { color: string; label: string; hint: string }[] = [
+  { color: '#30a46c', label: 'Readable', hint: 'at least one antenna reads the tag' },
+  { color: '#c77dff', label: 'Tag mounting', hint: 'dipole orientation, bike shadow or metal – an ideal tag would be read' },
+  { color: '#f5a623', label: 'Obstacles / table edge', hint: 'without obstacles and the raised track body it would be read' },
+  { color: '#e5484d', label: 'Tag not powered', hint: 'forward link: too little power reaches the tag' },
+  { color: '#3e8ef7', label: 'Reply too weak', hint: 'the tag answers, but below the reader Rx sensitivity' },
+];
+
 function hexRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -76,7 +85,10 @@ export function sliceToRgba(d: SliceData, mode: SliceMode, ports: number[], read
       }
       let rgb: [number, number, number] = [0, 0, 0];
       let alpha = 0;
-      if (count > 0) {
+      if (mode === 'limit' && d.limit) {
+        rgb = hexRgb(LIMIT_LEGEND[d.limit[i]].color);
+        alpha = d.limit[i] === 0 ? 150 : 255;
+      } else if (count > 0) {
         alpha = 255;
         if (mode === 'margin') rgb = ramp(best / 20);
         else if (mode === 'rssi') rgb = ramp((bestRssi - readerSens) / (-30 - readerSens));

@@ -27,7 +27,7 @@ ctx.onmessage = (ev: MessageEvent<WorkerRequest>) => {
       }
       case 'slice': {
         const s = computeSlice(req.setup, req.spec);
-        ctx.postMessage({ id: req.id, ok: true, result: s }, [...s.margin, ...s.rssi].map((a) => a.buffer));
+        ctx.postMessage({ id: req.id, ok: true, result: s }, [...s.margin, ...s.rssi, ...(s.limit ? [s.limit] : [])].map((a) => a.buffer));
         break;
       }
       case 'sim':

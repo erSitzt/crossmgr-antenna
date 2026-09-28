@@ -12,6 +12,7 @@ export function useCompute() {
   const gen = useRef(0);
   const simGen = useRef(0);
 
+  const withLimit = view.sliceMode === 'limit';
   useEffect(() => {
     const my = ++gen.current;
     const timer = setTimeout(async () => {
@@ -19,8 +20,8 @@ export function useCompute() {
       try {
         const [zones, sliceH, sliceF] = await Promise.all([
           view.showZones ? computeZonesAsync(setup, view.zoneStep) : Promise.resolve([]),
-          view.showHorizontal ? computeSliceAsync(setup, { kind: 'horizontal', at: finishElevation(setup.track) + view.sliceHeight, step: 0.1 }) : Promise.resolve(null),
-          view.showFinishSlice ? computeSliceAsync(setup, { kind: 'finish', at: 0, step: 0.05 }) : Promise.resolve(null),
+          view.showHorizontal ? computeSliceAsync(setup, { kind: 'horizontal', at: finishElevation(setup.track) + view.sliceHeight, step: 0.1, withLimit }) : Promise.resolve(null),
+          view.showFinishSlice ? computeSliceAsync(setup, { kind: 'finish', at: 0, step: 0.05, withLimit }) : Promise.resolve(null),
         ]);
         if (my === gen.current) setFields({ zones, sliceH, sliceF, computing: false });
       } catch (e) {
@@ -29,7 +30,7 @@ export function useCompute() {
       }
     }, 200);
     return () => clearTimeout(timer);
-  }, [setup, view.showZones, view.zoneStep, view.showHorizontal, view.sliceHeight, view.showFinishSlice, setFields]);
+  }, [setup, view.showZones, view.zoneStep, view.showHorizontal, view.sliceHeight, view.showFinishSlice, withLimit, setFields]);
 
   useEffect(() => {
     if (!view.autoSim) return;

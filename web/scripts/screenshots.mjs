@@ -206,6 +206,22 @@ await viewport('heatmap-overlap.png');
 await act(() => window.store.getState().setView({ sliceMode: 'rssi' }));
 await settle(800);
 await viewport('heatmap-rssi.png');
+// "what limits the read" with pessimistic values (Rx −70 dBm, 10 dB bike shadow), then the defaults
+await act(() => {
+  const s = window.store.getState();
+  s.updateEnv({ readerSensDbm: -70 });
+  s.updateTag({ shadowDb: 10 });
+  s.setView({ sliceMode: 'limit' });
+});
+await settle(1500);
+await viewport('heatmap-limit-pessimistic.png');
+await act(() => {
+  const s = window.store.getState();
+  s.updateEnv({ readerSensDbm: -80 });
+  s.updateTag({ shadowDb: 6 });
+});
+await settle(1500);
+await viewport('heatmap-limit.png');
 await act(() => window.store.getState().setView({ showHorizontal: false, showFinishSlice: true, sliceMode: 'dominant' }));
 await settle(1500);
 await camera([-13, 3.5, 0.01], [0, 2.5, 0]);

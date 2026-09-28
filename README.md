@@ -154,12 +154,33 @@ Example of changing widths: a 6 m approach, tapering to a 10 m finish table, tap
 | Zone opacity / resolution | Transparency; grid step 40 / 25 / 15 cm (finer = slower) |
 | Horizontal slice + height | Heatmap in a horizontal plane, height measured above the finish surface |
 | Finish-plane slice | Heatmap in the vertical finish plane |
-| Slice colours | **Strongest antenna** (port colour), **Antenna overlap count**, **Best RSSI**, **Link margin (0–20 dB)** |
+| Slice colours | **Strongest antenna** (port colour), **Antenna overlap count**, **Best RSSI**, **Link margin (0–20 dB)**, **What limits the read** (see below) |
 | Simulated passes & virtual wall | Lanes and rider lines, reads of the selected line, the virtual wall |
 
 | Strongest antenna | Overlap count | Best RSSI |
 | --- | --- | --- |
 | ![Heatmap: strongest antenna](docs/images/heatmap-dominant.png) | ![Heatmap: overlap count](docs/images/heatmap-overlap.png) | ![Heatmap: best RSSI](docs/images/heatmap-rssi.png) |
+
+**What limits the read.** When a zone is small or there is a gap, this mode shows why, for the best antenna at each spot:
+
+| Colour | Meaning | What helps |
+| --- | --- | --- |
+| Green – Readable | at least one antenna reads the tag | – |
+| Violet – Tag mounting | an ideal tag would be read here; the dipole orientation, bike shadow or metal prevents it | another antenna position / aim, tag orientation, spacer from metal |
+| Orange – Obstacles / table edge | without obstacles or the raised track body it would be read | move the antenna or the obstacle, raise the antenna |
+| Red – Tag not powered | the forward link is too weak: not enough power reaches the tag | more Tx power, closer / better aimed antenna |
+| Blue – Reply too weak | the tag answers, but below the reader's Rx sensitivity | better Rx sensitivity, less cable loss, closer antenna |
+
+Example: the default layout (two antennas on the left upright, one on the crossbar; top view, rider's left at the top), with pessimistic values (Rx −70 dBm, 10 dB bike shadow, left) and with the defaults (Rx −80 dBm, 6 dB, right).
+
+- **Pessimistic values:** the readable area (green) stays near the left upright. Around it, the tag mounting is the limit (violet): the fork tag sits 15 mm from the metal tube (4.5 dB each way), leans 27° back, and is weak towards the overhead antenna. Further out the reply is too weak (blue).
+- **Defaults:** the readable area covers most of the table. The violet ring shows that a better-mounted tag (more spacing from metal) would extend it further; beyond that the tag is not powered (red).
+
+| Rx −70 dBm, 10 dB shadow | Rx −80 dBm, 6 dB shadow (defaults) |
+| --- | --- |
+| ![What limits the read, pessimistic](docs/images/heatmap-limit-pessimistic.png) | ![What limits the read, defaults](docs/images/heatmap-limit.png) |
+
+The legend is also shown in the 3D view. This mode takes about three times longer to compute than the others.
 
 The finish-plane slice shows what each antenna covers across the track at every height:
 
@@ -256,14 +277,14 @@ Fields: size of one unit, **Units in row**, **Raised by** (banner on a fence), y
 
 | Preset | Height | Axis | Notes |
 | --- | --- | --- | --- |
-| Dogbone (M730) on fork leg, left | 0.55 m | vertical, 27° back | on the fork guard, 15 mm from the tube; right side shadowed 10 dB |
-| Dogbone (M730) on front number plate, horizontal | 0.95 m | across | weak towards side antennas |
-| Dogbone (M730) on front number plate, vertical | 0.95 m | vertical, 25° back | good towards side antennas |
-| Dogbone (M730) under side number plate, left | 0.75 m | along | right side shadowed 12 dB |
+| Dogbone (M730) on fork leg, left | 0.55 m | vertical, 27° back | on the fork guard, 15 mm from the tube; right side shadowed 6 dB |
+| Dogbone (M730) on front number plate, horizontal | 0.95 m | across | weak towards side antennas; 6 dB shadow from behind |
+| Dogbone (M730) on front number plate, vertical | 0.95 m | vertical, 25° back | good towards side antennas; 6 dB shadow from behind |
+| Dogbone (M730) under side number plate, left | 0.75 m | along | right side shadowed 8 dB |
 | Dogbone (M730) on helmet | 1.75 m | along | for the second tag |
 | Generic fork / plate / helmet tags | | | older generic values |
 
-The Dogbone presets use −22 dBm sensitivity: the M730 chip's ~−24 dBm read sensitivity, minus ~2 dB for mounting. Calibrate with live reads.
+The Dogbone presets use −22 dBm sensitivity: the M730 chip's ~−24 dBm read sensitivity, minus ~2 dB for mounting. The bike-shadow values are estimates (signal bends around the bike). Calibrate both with live reads.
 
 **Metal.** A plain dipole inlay directly on metal is practically shorted. The planner uses this detuning (each way):
 
@@ -271,7 +292,7 @@ The Dogbone presets use −22 dBm sensitivity: the M730 chip's ~−24 dBm read s
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Loss | 25 dB | 16 dB | 10 dB | 6 dB | 4.5 dB | 3 dB | 1 dB | 0 dB |
 
-**Reader**: model (Impinj Speedway R420 / R700), **Rx sensitivity** (the reader's receive threshold, often the limiting factor, see [10](#10-reading-the-results--lessons-learned)), reads per second for one tag, antenna dwell time, frequency.
+**Reader**: model (Impinj Speedway R420 / R700), **Rx sensitivity** (the reader's receive threshold, default −80 dBm; often the limiting factor, see [10](#10-reading-the-results--lessons-learned)), reads per second for one tag, antenna dwell time, frequency. Set it to what CrossMgrImpinj configures on your reader. As far as I know, Impinj readers use their most sensitive setting unless told otherwise.
 
 **Ground reflection.** One reflected ray is added coherently, so reflections can add up or cancel. It bounces off the surface where it actually lands:
 
@@ -519,10 +540,11 @@ The tag gain includes the dipole pattern: sin² of the angle between dipole axis
 
 These came out of the finish-table example and are worth checking for your own setup:
 
-- **Receiver sensitivity is often the limit.** The tag gets enough power, but its reply is below the reader's Rx threshold. With the example, Rx −70 dBm gave 25 % missed passes; −80 dBm gave 0 % and halved the spread. Check what CrossMgrImpinj uses.
+- **Receiver sensitivity is often the limit.** The tag gets enough power, but its reply is below the reader's Rx threshold (blue in *What limits the read*). With the example, Rx −70 dBm gave 25 % missed passes; −80 dBm (the default) gave 0 % and halved the spread. Check what CrossMgrImpinj uses.
+- **Small zones or a gap under the arch?** Switch the heatmap to *What limits the read*. Violet means the tag mounting (orientation, bike shadow, metal) is the cause; moving antennas or aiming them differently helps more than power.
 - **Metal kills dipole inlays.** A Dogbone directly on the fork tube missed 100 % of passes; on the fork guard (15 mm) 0 %, with 92 reads per pass; at 40 mm 172 reads.
 - **Orientation matters.** An antenna looking along the tag's dipole barely reads it. The overhead antenna got **no** reads from a vertical fork tag, but 30–66 reads per pass from a horizontal tag.
-- **Bike shadow.** A left-fork tag is ~10 dB weaker towards right-side antennas.
+- **Bike shadow.** A left-fork tag is weaker towards right-side antennas (default 6 dB, each way). With 10 dB, right-side antennas only covered the right edge.
 - **Two tags with the same EPC remove misses but blur the timing.** The fork and helmet tag peak at different moments, so the merged curve fires later and less consistently:
 
   | Setup | Missed | Mean offset | Spread |

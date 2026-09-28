@@ -66,7 +66,17 @@ export interface SliceSpec {
   /** horizontal: absolute elevation (Y). finish: X position of the vertical plane. */
   at: number;
   step: number;
+  withLimit?: boolean; // also classify what limits the read at each point (3× slower)
 }
+
+/** What limits the read at a point (best antenna). */
+export const LIMIT = {
+  readable: 0,
+  mounting: 1, // an ideal tag (no orientation null, bike shadow or metal) would be read
+  obstacles: 2, // without obstacles / the raised track body it would be read
+  notPowered: 3, // forward link: the tag does not get enough power
+  replyWeak: 4, // reverse link: the reply is below the reader's Rx sensitivity
+} as const;
 
 export interface SliceData {
   spec: SliceSpec;
@@ -79,6 +89,7 @@ export interface SliceData {
   antennaIds: string[];
   margin: Float32Array[]; // per antenna, index u + nu * v
   rssi: Float32Array[];
+  limit: Uint8Array | null; // LIMIT code per point when requested
 }
 
 export function computeSlice(setup: Setup, spec: SliceSpec): SliceData {
@@ -114,5 +125,33 @@ export function computeSlice(setup: Setup, spec: SliceSpec): SliceData {
     spec, uMin, vMin, nu, nv, step: spec.step,
     antennaIds: ctx.antennas.map((a) => a.antenna.id),
     margin, rssi,
+    limit: spec.withLimit ? classifyLimits(setup, spec, uMin, vMin, nu, nv, margin) : null,
   };
+}
+
+function classifyLimits(setup: Setup, spec: SliceSpec, uMin: number, vMin: number, nu: number, nv: number, margin: Float32Array[]): Uint8Array {
+  // ideal tag: no dipole null, no bike shadow, no metal – same sensitivity, gain and losses otherwise
+  const ideal = { ...setup.tag, axis: 'isotropic' as const, side: 'none' as const, shadowDb: 0, nearMetal: false };
+  const ctxIdeal = buildLinkCtx({ ...setup, tag: ideal });
+  const ctxClear = buildLinkCtx({ ...setup, tag: ideal, obstacles: [], env: { ...setup.env, terrainBlockDb: 0 } });
+  const poseIdeal = tagPose(ideal, DIR, RIGHT);
+  const out = new Uint8Array(nu * nv);
+  for (let v = 0; v < nv; v++)
+    for (let u = 0; u < nu; u++) {
+      const i = u + nu * v;
+      if (margin.some((m) => m[i] >= 0)) continue; // readable
+      const uu = uMin + u * spec.step, vv = vMin + v * spec.step;
+      const p: Vec3 = spec.kind === 'horizontal' ? [uu, spec.at, vv] : [spec.at, vv, uu];
+      if (ctxIdeal.antennas.some((a) => evalLink(ctxIdeal, a, p, poseIdeal).margin >= 0)) { out[i] = LIMIT.mounting; continue; }
+      let best: { margin: number; fwd: number; rev: number } | null = null;
+      for (const a of ctxClear.antennas) {
+        const r = evalLink(ctxClear, a, p, poseIdeal);
+        if (!best || r.margin > best.margin)
+          best = { margin: r.margin, fwd: r.pTagDbm - ideal.sensitivityDbm, rev: r.rssiDbm - setup.env.readerSensDbm };
+      }
+      if (best && best.margin >= 0) out[i] = LIMIT.obstacles;
+      else if (best && best.fwd < best.rev) out[i] = LIMIT.notPowered;
+      else out[i] = LIMIT.replyWeak;
+    }
+  return out;
 }

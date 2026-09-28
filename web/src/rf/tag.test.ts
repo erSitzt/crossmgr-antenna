@@ -32,6 +32,8 @@ describe('tag orientation and bike effects', () => {
     const left = { ...s.antennas[0], mount: undefined, position: [0, 1, -4] as [number, number, number], yawDeg: 0, pitchDeg: 0 };
     const right = { ...left, id: 'r', port: 2, position: [0, 1, 4] as [number, number, number], yawDeg: 180 };
     const links = tagLinks({ ...s, antennas: [left, right], env: { ...s.env, groundReflection: false } }, place);
-    expect(links[0].margin - links[1].margin).toBeCloseTo(dogFork.shadowDb * 2, 1); // shadow counts both ways on the margin via RSSI
+    // symmetric antennas: the shadow costs the right antenna once on the tag power and twice on the RSSI
+    expect(links[0].pTagDbm - links[1].pTagDbm).toBeCloseTo(dogFork.shadowDb, 1);
+    expect(links[0].rssiDbm - links[1].rssiDbm).toBeCloseTo(dogFork.shadowDb * 2, 1);
   });
 });

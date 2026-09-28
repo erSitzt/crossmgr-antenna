@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LIMIT_LEGEND } from './scene/FieldViews';
 import { Viewport, type CameraPreset } from './scene/Viewport';
 import { useStore } from './store';
 import { HardwarePanel } from './ui/HardwarePanel';
@@ -17,6 +18,7 @@ export function App() {
   const setMode = useStore((s) => s.setTransformMode);
   const select = useStore((s) => s.select);
   const name = useStore((s) => s.setup.name);
+  const view = useStore((s) => s.view);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,6 +44,16 @@ export function App() {
           <strong>{name}</strong>
           {computing && <span className="muted"> · computing…</span>}
         </div>
+        {view.sliceMode === 'limit' && (view.showHorizontal || view.showFinishSlice) && (
+          <div className="overlay viewport-legend">
+            <b>What limits the read</b>
+            {LIMIT_LEGEND.map((l) => (
+              <span key={l.label} title={l.hint}>
+                <span className="dot" style={{ background: l.color, borderRadius: 2 }} /> {l.label}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="overlay bottom-left">
           {camBtn('perspective', '3D')}
           {camBtn('top', 'Top')}

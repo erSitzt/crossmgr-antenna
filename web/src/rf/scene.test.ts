@@ -76,3 +76,20 @@ describe('terrain and finish table', () => {
     console.log(`zones @25cm: ${(performance.now() - t0).toFixed(0)} ms`);
   });
 });
+
+describe('what limits the read', () => {
+  it('classifies orientation, reverse link and readable points', async () => {
+    const { computeSlice, LIMIT } = await import('./grid');
+    const s = makeDefaultSetup('straight');
+    // only the overhead antenna: a vertical tag right below it sits in the dipole null
+    const top = s.antennas.find((a) => a.mount?.member === 'top')!;
+    const only = { ...s, antennas: [top], tag: { ...s.tag, tiltBackDeg: 0, side: 'none' as const, nearMetal: false } };
+    const d = computeSlice(only, { kind: 'finish', at: 0, step: 0.25, withLimit: true });
+    const at = (z: number, y: number) => d.limit![Math.round((z - d.uMin) / d.step) + d.nu * Math.round((y - d.vMin) / d.step)];
+    expect(at(0, 0.5)).toBe(LIMIT.mounting); // straight below: orientation null
+    const codes = new Set(d.limit);
+    expect(codes.has(LIMIT.readable) || codes.has(LIMIT.mounting)).toBe(true);
+    // far outside: nothing reaches the tag or the reply is too weak
+    expect([LIMIT.notPowered, LIMIT.replyWeak]).toContain(at(d.uMin + d.step, d.vMin + d.step));
+  });
+});

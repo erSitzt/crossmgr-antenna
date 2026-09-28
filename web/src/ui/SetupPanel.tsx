@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { SegmentKind, Setup, Track, Truss } from '../model/types';
 import { TRACK_PRESETS, type TrackPreset } from '../presets/templates';
 import { elevationAtU, finishU, segmentLength, segmentStarts, totalLength, widthAtU } from '../rf/track';
+import { LIMIT_LEGEND } from '../scene/FieldViews';
 import { useStore } from '../store';
 import { Check, NumField, Section, Select, Slider } from './controls';
 
@@ -84,9 +85,11 @@ export function SetupPanel() {
             { value: 'overlap', label: 'Antenna overlap count' },
             { value: 'rssi', label: 'Best RSSI' },
             { value: 'margin', label: 'Link margin (0–20 dB)' },
+            { value: 'limit', label: 'What limits the read' },
           ]}
           onChange={(sliceMode) => setView({ sliceMode })}
         />
+        {view.sliceMode === 'limit' && <LimitLegend />}
         <Slider label="Slice opacity" value={view.sliceOpacity} min={0.1} max={1} step={0.05} onChange={(sliceOpacity) => setView({ sliceOpacity })} />
         <Check label="Simulated passes & virtual wall" value={view.showPasses} onChange={(showPasses) => setView({ showPasses })} />
       </Section>
@@ -258,5 +261,17 @@ function ArchSection({ trusses }: { trusses: Truss[] }) {
       ))}
       <p className="muted">Antennas mounted on the truss move with it when you change height, span or position.</p>
     </Section>
+  );
+}
+
+export function LimitLegend() {
+  return (
+    <ul className="legend-list">
+      {LIMIT_LEGEND.map((l) => (
+        <li key={l.label} title={l.hint}>
+          <span className="dot" style={{ background: l.color, borderRadius: 2 }} /> <b>{l.label}</b> <span className="muted">– {l.hint}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

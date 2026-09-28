@@ -121,7 +121,7 @@ export function makeDefaultSetup(preset: TrackPreset = 'straight'): Setup {
       ground: groundPreset('clay-moist'),
       terrainGround: groundPreset('grass'),
       terrainBlockDb: 25,
-      readerSensDbm: -70,
+      readerSensDbm: -80,
       freqMHz: 866.5,
       etsiLimitEirpDbm: 35.15,
     },
