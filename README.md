@@ -18,7 +18,7 @@ Coordinates: X = direction of travel (finish plane X = 0), Z = across the track 
 docker compose up --build
 ```
 
-Open http://localhost:18787. The container connects out to the reader (LLRP, TCP 5084) over normal bridge networking.
+Open http://localhost:18787 (another host port: `HOST_PORT=18789 docker compose up -d`). The container connects out to the reader (LLRP, TCP 5084) over normal bridge networking.
 
 ## Run for development
 

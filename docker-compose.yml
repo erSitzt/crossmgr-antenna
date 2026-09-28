@@ -2,7 +2,8 @@ services:
   antenna-planner:
     build: .
     ports:
-      - "18787:18787"
+      # host port can be changed: HOST_PORT=18789 docker compose up -d
+      - "${HOST_PORT:-18787}:18787"
     restart: unless-stopped
     # The container connects out to the Impinj reader (LLRP, TCP 5084) on your LAN;
     # default bridge networking is enough for that.

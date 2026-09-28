@@ -21,6 +21,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from llrp_client import AntennaConfig, LlrpReader, MockReader, ReaderConfig
@@ -136,6 +137,16 @@ async def ws_endpoint(ws: WebSocket) -> None:
 dist = Path(__file__).resolve().parent.parent / "web" / "dist"
 if dist.exists():
     app.mount("/", StaticFiles(directory=dist, html=True), name="web")
+else:
+
+    @app.get("/", response_class=HTMLResponse)
+    async def no_frontend() -> str:
+        return (
+            "<h2>crossmgr-antenna backend is running</h2>"
+            "<p>The web app is not built. Run <code>npm run build</code> in <code>web/</code> and restart, "
+            "use the dev server at <a href='http://localhost:5173'>localhost:5173</a>, "
+            "or run <code>docker compose up --build</code>.</p>"
+        )
 
 
 if __name__ == "__main__":
