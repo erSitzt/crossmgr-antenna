@@ -104,3 +104,5 @@ button.link:hover { text-decoration: underline; }
 .tbl.points td { padding: 1px 4px; }
 .tbl.points .field { grid-template-columns: 0 1fr auto; margin: 0; }
 .line-label { color: #ffb454; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layout-list { list-style: none; padding: 0; margin: 4px 0; }
+.layout-list li { padding: 2px 0; }

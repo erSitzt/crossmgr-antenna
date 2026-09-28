@@ -1,13 +1,15 @@
 /// <reference lib="webworker" />
 import type { Setup } from '../model/types';
 import { computeSlice, computeZones, defaultVolume, type SliceSpec } from './grid';
+import { searchLayouts, type LayoutOptions } from './layoutSearch';
 import { optimizePower, runPassSim } from './passSim';
 
 export type WorkerRequest =
   | { id: number; type: 'zones'; setup: Setup; step: number }
   | { id: number; type: 'slice'; setup: Setup; spec: SliceSpec }
   | { id: number; type: 'sim'; setup: Setup }
-  | { id: number; type: 'optimize'; setup: Setup };
+  | { id: number; type: 'optimize'; setup: Setup }
+  | { id: number; type: 'layout'; setup: Setup; opts: LayoutOptions };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -31,6 +33,11 @@ ctx.onmessage = (ev: MessageEvent<WorkerRequest>) => {
       case 'sim':
         ctx.postMessage({ id: req.id, ok: true, result: runPassSim(req.setup, { keepSamples: true }) });
         break;
+      case 'layout': {
+        const res = searchLayouts(req.setup, req.opts, (p) => ctx.postMessage({ id: req.id, progress: p }));
+        ctx.postMessage({ id: req.id, ok: true, result: res });
+        break;
+      }
       case 'optimize': {
         const res = optimizePower(req.setup, (p) => ctx.postMessage({ id: req.id, progress: p }));
         ctx.postMessage({ id: req.id, ok: true, result: res });

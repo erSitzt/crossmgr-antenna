@@ -60,6 +60,7 @@ interface State {
   duplicateAntenna: (id: string) => void;
   removeAntenna: (id: string) => void;
   applyTxPowers: (tx: Record<string, number>) => void;
+  replaceAntennas: (antennas: Antenna[]) => void;
   addObstacle: (materialId: string) => void;
   updateObstacle: (id: string, p: Partial<Obstacle>) => void;
   duplicateObstacle: (id: string) => void;
@@ -198,6 +199,10 @@ export const useStore = create<State>((set, get) => {
     removeAntenna: (id) => {
       mut((s) => ({ ...s, antennas: s.antennas.filter((a) => a.id !== id) }));
       if (get().selectedId === id) set({ selectedId: null });
+    },
+    replaceAntennas: (antennas) => {
+      mut((s) => ({ ...s, antennas }));
+      set({ selectedId: null });
     },
     applyTxPowers: (tx) =>
       mut((s) => ({ ...s, antennas: s.antennas.map((a) => (tx[a.id] !== undefined ? { ...a, txDbm: tx[a.id] } : a)) })),

@@ -8,6 +8,7 @@ A 3D planner for UHF RFID finish-line antennas (Impinj R420/R700 + circularly po
 - **Views**: a 3D read-zone shape per antenna, plus heatmaps at tag height and in the finish plane (strongest antenna / overlap / RSSI / margin).
 - **Virtual wall**: simulated passes along straight lanes and realistic rider lines (corner cuts, random lines), with the pass time estimated like CrossMgrImpinj (antenna with most reads → quadratic RSSI peak). Shows the timing offset in cm per line.
 - **Power optimiser**: searches per-antenna Tx power (within reader/ETSI limits) for zero missed passes and the wall exactly on the finish line.
+- **Layout search**: finds the best number (1–4), placement, aim and power of antennas on the finish arch.
 - **Live reader**: direct LLRP via sllurp. Pushes per-port power, groups reads into passes, plots RSSI curves, records sessions, and calibrates the model per port (measured vs. simulated peak RSSI).
 
 Coordinates: X = direction of travel at the finish (finish plane X = 0), Z = across the track (+ = rider's right), Y = up (absolute elevation).
@@ -105,6 +106,21 @@ Riders rarely hold a lane. In the *Simulation* tab, **Rider lines** are simulate
 - **Random lines**: extra smooth lines with random entry, crossing and exit positions (seeded, reproducible).
 
 The timing error of each line is measured against the moment it really crosses the finish plane. The tag orientation follows the actual direction of travel. All lines count in the optimiser. In 3D, straight lanes are grey, rider lines orange (random: dashed). The red wall connects the straight lanes; orange dots mark where timing fires on each rider line.
+
+## Layout search
+
+*Simulation → Antenna layout search* finds the best antenna setup on the finish arch:
+
+1. **Placements tried:**
+   - uprights (left/right) at 0.5 m height steps, aimed across the track or turned 30° towards oncoming riders, level / 15° / 30° down;
+   - crossbar at five offsets, pointing straight down or tilted 30° towards riders.
+
+   You choose which truss members are allowed, the antenna model and the maximum count.
+2. **Search:** antennas are added one at a time (the best remaining placement each time), then every antenna is re-tried at every free placement while the others stay. The placements are compared with all lanes and rider lines at a fixed *search power*, using a reduced trial count.
+3. **Power:** optionally, the per-antenna power is optimised for each result.
+4. **Results:** a table with the best layout for each count (score, missed passes, offset, spread, worst line). **Apply** replaces the current antennas with that layout, mounted on the truss.
+
+More antennas are not automatically better: the reader switches between ports, so every extra antenna takes read time from the others. A full 1–4 antenna search takes roughly 15–60 s.
 
 ## Live tuning workflow
 

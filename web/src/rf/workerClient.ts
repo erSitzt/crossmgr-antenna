@@ -1,5 +1,6 @@
 import type { Setup } from '../model/types';
 import type { SliceData, SliceSpec, ZoneMesh } from './grid';
+import type { LayoutOptions, LayoutProgress, LayoutResult } from './layoutSearch';
 import type { OptimizeProgress, SimResult } from './passSim';
 
 type Pending = { resolve: (v: any) => void; reject: (e: any) => void; onProgress?: (p: any) => void };
@@ -42,6 +43,9 @@ export const computeSliceAsync = (setup: Setup, spec: SliceSpec) =>
   fieldWorker.request<SliceData>({ type: 'slice', setup, spec });
 
 export const runSimAsync = (setup: Setup) => simWorker.request<SimResult>({ type: 'sim', setup });
+
+export const layoutSearchAsync = (setup: Setup, opts: LayoutOptions, onProgress: (p: LayoutProgress) => void) =>
+  simWorker.request<LayoutResult[]>({ type: 'layout', setup, opts }, onProgress);
 
 export const optimizeAsync = (setup: Setup, onProgress: (p: OptimizeProgress) => void) =>
   simWorker.request<SimResult>({ type: 'optimize', setup }, onProgress);

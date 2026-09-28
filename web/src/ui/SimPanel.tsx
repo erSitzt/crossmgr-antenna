@@ -3,6 +3,7 @@ import { estimatePassTime } from '../rf/regression';
 import { optimizeAsync, runSimAsync } from '../rf/workerClient';
 import { portColor, useStore } from '../store';
 import { Check, NumField, Section, Select } from './controls';
+import { LayoutSearchSection } from './LayoutSearch';
 import { RiderLinesSection } from './RiderLines';
 import { RssiChart } from './RssiChart';
 
@@ -84,6 +85,8 @@ export function SimPanel() {
           {simBusy && progress && <span className="muted">iter {progress.iteration}, score {progress.score.toFixed(1)}</span>}
         </div>
       </Section>
+
+      <LayoutSearchSection />
 
       {suggestion && (
         <Section title="Suggested power">
