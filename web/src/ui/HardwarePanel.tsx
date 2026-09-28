@@ -1,11 +1,14 @@
-import type { Antenna, GroundSettings, Obstacle, ObstacleBase, TagAxis, Truss, TrussMember } from '../model/types';
+import { useMemo } from 'react';
+import type { Antenna, GroundSettings, Obstacle, ObstacleBase, TagAxis, TagMount, TagSide, Truss, TrussMember } from '../model/types';
 import { materialById, OBSTACLE_MATERIALS } from '../presets/obstacles';
 import { READER_PROFILES, TAG_PRESETS } from '../presets/profiles';
 import { GROUND_PRESETS, groundPreset, groundReflection } from '../rf/ground';
-import { eirpLinearDbm } from '../rf/link';
+import { eirpLinearDbm, metalDetuneDb } from '../rf/link';
+import { CENTRE_LINE } from '../rf/lines';
+import { placeBike, tagLinks } from '../rf/tagView';
 import { wavelength } from '../rf/math';
 import { portColor, useStore } from '../store';
-import { Check, NumField, Section, Select } from './controls';
+import { Check, NumField, Section, Select, Slider } from './controls';
 
 export function HardwarePanel() {
   const setup = useStore((s) => s.setup);
@@ -228,10 +231,10 @@ function TagAndRf() {
           label="Dipole axis"
           value={tag.axis}
           options={[
-            { value: 'vertical', label: 'Vertical' },
-            { value: 'lateral', label: 'Across track' },
-            { value: 'along', label: 'Along track' },
-            { value: 'isotropic', label: 'Isotropic' },
+            { value: 'vertical', label: 'Vertical (up the fork / plate)' },
+            { value: 'lateral', label: 'Across the bike' },
+            { value: 'along', label: 'Along the bike' },
+            { value: 'isotropic', label: 'Isotropic (ideal)' },
           ]}
           onChange={(axis) => updateTag({ axis, id: 'custom' })}
         />
@@ -240,7 +243,44 @@ function TagAndRf() {
         <NumField label="Body/bike loss" unit="dB" value={tag.bodyLossDb} min={0} step={0.5} onChange={(bodyLossDb) => updateTag({ bodyLossDb, id: 'custom' })} />
         <NumField label="Polarisation loss" unit="dB" value={tag.polLossDb} min={0} step={0.5} onChange={(polLossDb) => updateTag({ polLossDb, id: 'custom' })} />
         <NumField label="Backscatter loss" unit="dB" value={tag.backscatterLossDb} min={0} step={0.5} onChange={(backscatterLossDb) => updateTag({ backscatterLossDb, id: 'custom' })} />
+        <NumField label="Tilt back" unit="°" value={tag.tiltBackDeg} min={-90} max={90} step={1} title="Top of the tag leaning back towards the rider (fork rake ≈ 27°, plate ≈ 25°)" onChange={(tiltBackDeg) => updateTag({ tiltBackDeg, id: 'custom' })} />
+        <Select<TagMount>
+          label="Mounted on"
+          value={tag.mount}
+          options={[
+            { value: 'fork', label: 'Fork leg' },
+            { value: 'front-plate', label: 'Front number plate' },
+            { value: 'side-plate', label: 'Side number plate' },
+            { value: 'helmet', label: 'Helmet' },
+            { value: 'other', label: 'Other' },
+          ]}
+          onChange={(mount) => updateTag({ mount, id: 'custom' })}
+        />
+        <Select<TagSide>
+          label="Bike side"
+          value={tag.side}
+          options={[
+            { value: 'left', label: 'Left (shadowed to the right)' },
+            { value: 'right', label: 'Right (shadowed to the left)' },
+            { value: 'front', label: 'Front (shadowed from behind)' },
+            { value: 'none', label: 'No bike shadow' },
+          ]}
+          onChange={(side) => updateTag({ side, id: 'custom' })}
+        />
+        <NumField label="Bike shadow" unit="dB" value={tag.shadowDb} min={0} max={30} step={1} title="Loss towards the fully shadowed side (fork, wheel, engine, rider)" onChange={(shadowDb) => updateTag({ shadowDb, id: 'custom' })} />
       </div>
+      <Check label="Mounted near metal (fork tube, frame)" value={tag.nearMetal} onChange={(nearMetal) => updateTag({ nearMetal, id: 'custom' })} />
+      {tag.nearMetal && (
+        <>
+          <NumField label="Gap to metal" unit="mm" value={tag.metalGapMm} min={0} max={100} step={1} title="Spacer / fork guard distance between inlay and metal" onChange={(metalGapMm) => updateTag({ metalGapMm, id: 'custom' })} />
+          <p className={metalDetuneDb(tag) >= 10 ? 'warn' : 'muted'}>
+            Detuning by metal: −{metalDetuneDb(tag).toFixed(1)} dB each way (−{(2 * metalDetuneDb(tag)).toFixed(1)} dB on RSSI).
+            {metalDetuneDb(tag) >= 10 ? ' A plain dipole inlay this close to metal will barely read – use a spacer / fork guard or an on-metal tag.' : ''}
+          </p>
+        </>
+      )}
+      {tag.notes && <p className="muted">{tag.notes}</p>}
+      <BikeView />
       <Select
         label="Reader"
         value={setup.readerProfile.id}
@@ -406,5 +446,60 @@ function ObstacleProps({ o }: { o: Obstacle }) {
         onChange={(base) => u({ base })}
       />
     </Section>
+  );
+}
+
+/** Bike + tag in 3D, and the live link budget from the tag to every antenna at the chosen bike position. */
+function BikeView() {
+  const setup = useStore((s) => s.setup);
+  const view = useStore((s) => s.view);
+  const setView = useStore((s) => s.setView);
+  const sim = useStore((s) => s.sim);
+  const selectedLane = useStore((s) => s.selectedLane);
+  const setSim = useStore((s) => s.setSim);
+  const lane = sim?.lanes[selectedLane];
+  const traj = lane?.trajectory ?? CENTRE_LINE;
+  const links = useMemo(
+    () => tagLinks(setup, placeBike(setup, traj, (lane?.crossS ?? 0) + view.bikeS)),
+    [setup, traj, lane?.crossS, view.bikeS],
+  );
+  return (
+    <div className="arch">
+      <div className="row">
+        <b>Bike view</b>
+        <Check label="Show bike" value={view.showBike} onChange={(showBike) => setView({ showBike })} />
+        <Check label="Rider" value={view.bikeRider} onChange={(bikeRider) => setView({ bikeRider })} />
+        <Check label="Links" value={view.bikeLinks} onChange={(bikeLinks) => setView({ bikeLinks })} />
+      </div>
+      {sim && (
+        <Select
+          label="Riding on"
+          value={String(selectedLane)}
+          options={sim.lanes.map((l, i) => ({ value: String(i), label: l.kind === 'lane' ? l.label : `${l.label} (${l.lateralM.toFixed(1)} m)` }))}
+          onChange={(v) => setSim({ selectedLane: +v })}
+        />
+      )}
+      <Slider label="Distance to finish" unit="m" value={view.bikeS} min={-15} max={10} step={0.25} onChange={(bikeS) => setView({ bikeS })} />
+      <table className="tbl">
+        <thead>
+          <tr><th>Antenna</th><th>Tag power</th><th>RSSI</th><th>Bike shadow</th><th>Margin</th></tr>
+        </thead>
+        <tbody>
+          {links.map((l) => (
+            <tr key={l.antennaId}>
+              <td><span className="dot" style={{ background: portColor(l.port) }} /> P{l.port}</td>
+              <td>{l.pTagDbm.toFixed(1)} dBm</td>
+              <td>{l.rssiDbm.toFixed(1)} dBm</td>
+              <td>{l.shadowDb > 0.05 ? `−${l.shadowDb.toFixed(1)} dB` : '–'}</td>
+              <td className={l.margin < 0 ? 'warn' : ''}>{l.margin >= 0 ? '+' : ''}{l.margin.toFixed(1)} dB</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="muted">
+        The yellow line on the bike is the tag's dipole axis. An antenna looking along that line sees almost nothing; one looking at it
+        side-on sees the most. Link lines: green ≥ 6 dB margin, orange 0–6 dB, red dashed = no read.
+      </p>
+    </div>
   );
 }

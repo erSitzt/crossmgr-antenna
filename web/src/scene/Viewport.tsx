@@ -8,6 +8,8 @@ import { finishElevation, finishWidth } from '../rf/track';
 import { DEG } from '../rf/math';
 import { useStore } from '../store';
 import { AntennaMesh } from './AntennaMesh';
+import { BikeWithTag } from './BikeMesh';
+import { CENTRE_LINE } from '../rf/lines';
 import { ObstacleMesh } from './ObstacleMesh';
 import { ReadZones, SliceView } from './FieldViews';
 import { PassPaths } from './PassPaths';
@@ -126,6 +128,15 @@ function SceneContent() {
       {view.showHorizontal && sliceH && <SliceView data={sliceH} mode={view.sliceMode} setup={setup} opacity={view.sliceOpacity} />}
       {view.showFinishSlice && sliceF && <SliceView data={sliceF} mode={view.sliceMode} setup={setup} opacity={view.sliceOpacity} />}
       {view.showPasses && sim && <PassPaths sim={sim} setup={setup} selectedLane={selectedLane} />}
+      {view.showBike && (
+        <BikeWithTag
+          setup={setup}
+          traj={sim?.lanes[selectedLane]?.trajectory ?? CENTRE_LINE}
+          s={(sim?.lanes[selectedLane]?.crossS ?? 0) + view.bikeS}
+          rider={view.bikeRider}
+          showLinks={view.bikeLinks}
+        />
+      )}
       {target && (
         <TransformControls
           object={target}

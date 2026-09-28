@@ -14,6 +14,8 @@ export interface Trajectory {
   points: LinePoint[];
 }
 
+export const CENTRE_LINE: Trajectory = { id: 'centre', label: 'Centre', kind: 'lane', points: [{ sM: 0, frac: 0 }] };
+
 export function fracAt(tr: Trajectory, s: number): number {
   const p = tr.points;
   if (p.length === 0) return 0;

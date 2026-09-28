@@ -29,6 +29,8 @@ export interface ReaderProfile {
 }
 
 export type TagAxis = 'lateral' | 'vertical' | 'along' | 'isotropic';
+export type TagSide = 'none' | 'left' | 'right' | 'front';
+export type TagMount = 'fork' | 'front-plate' | 'side-plate' | 'helmet' | 'other';
 
 export interface TagProfile {
   id: string;
@@ -37,9 +39,16 @@ export interface TagProfile {
   gainDbi: number;
   heightM: number; // mounting height above ground
   axis: TagAxis; // dipole axis relative to rider motion
+  tiltBackDeg: number; // vertical/along axis tilted backwards about the lateral axis (fork rake ≈ 27°)
+  mount: TagMount; // where the tag sits on the bike (3D view)
+  side: TagSide; // which side of the bike the tag is on – the bike shadows the opposite side
+  shadowDb: number; // loss towards the fully shadowed side (fork, wheel, rider)
+  nearMetal: boolean; // mounted close to metal (fork tube, frame)
+  metalGapMm: number; // distance between inlay and metal (spacer, fork guard)
   bodyLossDb: number; // bike / body / mud detuning
   polLossDb: number; // circular reader antenna -> linear tag: 3 dB
   backscatterLossDb: number; // modulation / backscatter efficiency
+  notes?: string;
 }
 
 export interface Antenna {

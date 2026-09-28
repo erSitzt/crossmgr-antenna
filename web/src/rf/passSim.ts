@@ -1,5 +1,5 @@
 import type { Setup, Vec3 } from '../model/types';
-import { buildLinkCtx, eirpLinearDbm, evalLink, tagAxisWorld, type LinkCtx } from './link';
+import { buildLinkCtx, eirpLinearDbm, evalLink, tagPose, type LinkCtx } from './link';
 import { estimatePassTime, type Read } from './regression';
 import { makeRng } from './rng';
 import { buildTrajectories, crossingS, fracAt, laneOffsets, trajPoint, trajState, type Trajectory } from './lines';
@@ -66,7 +66,7 @@ function simulatePass(ctx: LinkCtx, path: TrackPath, setup: Setup, tr: Trajector
     const noise = rng.gauss() * sim.rssiNoiseDb;
     const protocolOk = rng.next() < 0.9;
     const st = trajState(path, tr, v * t, tag.heightM);
-    const res = evalLink(ctx, a, st.pos, tagAxisWorld(tag.axis, st.dir, st.right));
+    const res = evalLink(ctx, a, st.pos, tagPose(tag, st.dir, st.right));
     if (protocolOk && res.margin + noise > 0) {
       reads.push({ t: t - crossS / v, port: a.antenna.port, antennaId: a.antenna.id, rssi: Math.round(res.rssiDbm + noise) });
     }
@@ -157,7 +157,7 @@ export function peakRssiAlongLane(setup: Setup, lateralAtFinish: number): Record
     const smp = path.sample(s);
     const lateral = frac * path.width(s);
     const pos: Vec3 = [smp.pos[0] + smp.right[0] * lateral, smp.pos[1] + setup.tag.heightM, smp.pos[2] + smp.right[2] * lateral];
-    const axis = tagAxisWorld(setup.tag.axis, smp.dir, smp.right);
+    const axis = tagPose(setup.tag, smp.dir, smp.right);
     for (const a of ctx.antennas) {
       const r = evalLink(ctx, a, pos, axis);
       if (r.margin >= 0) out[a.antenna.port] = Math.max(out[a.antenna.port] ?? -Infinity, r.rssiDbm);

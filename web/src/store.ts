@@ -21,6 +21,10 @@ export interface ViewSettings {
   sliceOpacity: number;
   showPasses: boolean;
   autoSim: boolean;
+  showBike: boolean;
+  bikeRider: boolean;
+  bikeLinks: boolean;
+  bikeS: number; // bike position relative to its line's finish crossing (m, − = before)
 }
 
 interface State {
@@ -102,6 +106,10 @@ export const useStore = create<State>((set, get) => {
       sliceOpacity: 0.75,
       showPasses: true,
       autoSim: true,
+      showBike: true,
+      bikeRider: true,
+      bikeLinks: true,
+      bikeS: -2,
     },
     zones: [],
     sliceH: null,

@@ -4,7 +4,7 @@ A 3D planner for UHF RFID finish-line antennas (Impinj R420/R700 + circularly po
 [CrossMgrImpinj](https://github.com/esitarski/CrossMgr/tree/master/CrossMgrImpinj) and crossmgr-interface.
 
 - **3D scene**: a track built from segments (turns, ramps, finish tables, changing width), finish arch trusses, obstacles (hay bales, banners, barriers, …), and 2–4 antennas with position + yaw / tilt / roll (gizmo: `W` move, `E` rotate). Antennas can be mounted on the truss.
-- **RF model**: antenna pattern (gain, beamwidth, front/back), forward link (tag power-up) and reverse link (RSSI), tag dipole orientation, polarisation / body loss, obstacle losses, blocking by the raised track, ground reflection by ground type (track surface and surroundings), ETSI 2 W ERP check.
+- **RF model**: antenna pattern (gain, beamwidth, front/back), forward link (tag power-up) and reverse link (RSSI), tag dipole orientation and tilt, bike shadowing, detuning near metal, polarisation / body loss, obstacle losses, blocking by the raised track, ground reflection by ground type (track surface and surroundings), ETSI 2 W ERP check.
 - **Views**: a 3D read-zone shape per antenna, plus heatmaps at tag height and in the finish plane (strongest antenna / overlap / RSSI / margin).
 - **Virtual wall**: simulated passes along straight lanes and realistic rider lines (corner cuts, random lines), with the pass time estimated like CrossMgrImpinj (antenna with most reads → quadratic RSSI peak). Shows the timing offset in cm per line.
 - **Power optimiser**: searches per-antenna Tx power (within reader/ETSI limits) for zero missed passes and the wall exactly on the finish line.
@@ -106,6 +106,26 @@ Riders rarely hold a lane. In the *Simulation* tab, **Rider lines** are simulate
 - **Random lines**: extra smooth lines with random entry, crossing and exit positions (seeded, reproducible).
 
 The timing error of each line is measured against the moment it really crosses the finish plane. The tag orientation follows the actual direction of travel. All lines count in the optimiser. In 3D, straight lanes are grey, rider lines orange (random: dashed). The red wall connects the straight lanes; orange dots mark where timing fires on each rider line.
+
+## Tag on the bike
+
+The tag settings (*Antennas → Tag, reader & environment*) describe how the tag is mounted:
+
+| Setting | Meaning |
+| --- | --- |
+| Dipole axis + Tilt back | Direction of the inlay's dipole: vertical (up the fork / plate), across or along the bike, tilted back like the fork rake (≈ 27°) or number plate (≈ 25°) |
+| Mounted on | Fork leg, front plate, side plate or helmet (where the 3D bike shows the tag) |
+| Bike side + Bike shadow | A tag on the left fork leg is hidden from right-side antennas by fork, wheel and engine; a front-plate tag is hidden from behind. The loss grows to the set value towards the fully shadowed side |
+| Near metal + Gap | A plain dipole inlay directly on metal is practically shorted (≈ 25 dB loss each way); 15 mm (fork guard) ≈ 4.5 dB, 40 mm ≈ 1 dB |
+
+Presets for the **Avery Dennison Dogbone with Impinj M730** (−22 dBm effective sensitivity, allowing ~2 dB for mounting against the chip's ~−24 dBm): on the left fork leg (on the fork guard, 15 mm from the tube), on the front plate horizontal or vertical, and under the left side plate. Adjust the mounting values to your holders and calibrate with live reads.
+
+**Bike view.** A simplified motocross bike (optional rider) rides on the lane or rider line selected in the simulation, at an adjustable distance to the finish. The tag is drawn at its mounting point with its dipole axis (yellow). Lines to every antenna show the link margin at that spot (green ≥ 6 dB, orange 0–6 dB, red dashed = no read). A table lists tag power, RSSI, bike shadow and margin per antenna.
+
+Things this makes visible:
+- An antenna looking along the dipole axis (e.g. overhead antenna vs. vertical fork tag) barely reads it.
+- An antenna on the far side of a side-mounted tag loses the bike-shadow value.
+- The receiver sensitivity (Rx) is often the limit: the tag powers up, but its reply is below the reader's threshold.
 
 ## Layout search
 

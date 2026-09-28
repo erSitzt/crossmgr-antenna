@@ -1,5 +1,5 @@
 import type { Setup, Vec3 } from '../model/types';
-import { buildLinkCtx, evalLink, tagAxisWorld } from './link';
+import { buildLinkCtx, evalLink, tagPose } from './link';
 import { surfaceNets } from './surfaceNets';
 import { finishElevation, maxWidthNearFinish } from './track';
 
@@ -44,7 +44,7 @@ export interface ZoneMesh {
 
 export function computeZones(setup: Setup, vol: VolumeSpec): ZoneMesh[] {
   const ctx = buildLinkCtx(setup);
-  const axisW = tagAxisWorld(setup.tag.axis, DIR, RIGHT);
+  const axisW = tagPose(setup.tag, DIR, RIGHT);
   const [nx, ny, nz] = vol.dims;
   const out: ZoneMesh[] = [];
   for (const a of ctx.antennas) {
@@ -83,7 +83,7 @@ export interface SliceData {
 
 export function computeSlice(setup: Setup, spec: SliceSpec): SliceData {
   const ctx = buildLinkCtx(setup);
-  const axisW = tagAxisWorld(setup.tag.axis, DIR, RIGHT);
+  const axisW = tagPose(setup.tag, DIR, RIGHT);
   const halfW = maxWidthNearFinish(setup.track) / 2 + 4;
   let uMin: number, vMin: number, uLen: number, vLen: number;
   if (spec.kind === 'horizontal') {

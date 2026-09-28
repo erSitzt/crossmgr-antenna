@@ -36,17 +36,44 @@ export function buildLinkCtx(setup: Setup, overrides?: { txDbm?: Record<string, 
   return { antennas, tag: setup.tag, env: setup.env, lambda, k: (2 * Math.PI) / lambda, groundY: finishElevation(setup.track), geom: buildSceneGeom(setup) };
 }
 
-export function tagAxisWorld(axis: TagAxis, dir: Vec3, right: Vec3): Vec3 {
+/** Tag dipole axis in world coordinates from the bike's direction of travel and right side. */
+export function tagAxisWorld(axis: TagAxis, dir: Vec3, right: Vec3, tiltBackDeg = 0): Vec3 {
+  const t = (tiltBackDeg * Math.PI) / 180;
   switch (axis) {
     case 'lateral':
       return right;
-    case 'along':
-      return dir;
-    case 'vertical':
-      return [0, 1, 0];
+    case 'along': // forward; tips up at the front when the mount leans back (same rotation as 'vertical')
+      return [dir[0] * Math.cos(t), Math.sin(t), dir[2] * Math.cos(t)];
+    case 'vertical': // up, leaning backwards (towards the rider) by the tilt
+      return [-dir[0] * Math.sin(t), Math.cos(t), -dir[2] * Math.sin(t)];
     default:
       return [0, 0, 1];
   }
+}
+
+/** Tag orientation plus the bike frame used for body shadowing. */
+export interface TagPose {
+  axis: Vec3;
+  fwd: Vec3;
+  right: Vec3;
+}
+
+export const tagPose = (tag: TagProfile, dir: Vec3, right: Vec3): TagPose => ({
+  axis: tagAxisWorld(tag.axis, dir, right, tag.tiltBackDeg ?? 0),
+  fwd: dir,
+  right,
+});
+
+const toPose = (p: TagPose | Vec3): TagPose => (Array.isArray(p) ? { axis: p, fwd: [1, 0, 0], right: [0, 0, 1] } : p);
+
+/** Loss (dB) because the bike sits between the tag and the source; `toSrc` points from tag to source. */
+export function bikeShadowDb(tag: TagProfile, pose: TagPose, toSrc: Vec3): number {
+  const db = tag.shadowDb ?? 0;
+  if (!db || !tag.side || tag.side === 'none') return 0;
+  const r = toSrc[0] * pose.right[0] + toSrc[2] * pose.right[2];
+  const f = toSrc[0] * pose.fwd[0] + toSrc[2] * pose.fwd[2];
+  const x = tag.side === 'left' ? r : tag.side === 'right' ? -r : -f; // front: shadowed from behind
+  return db * Math.min(1, Math.max(0, x) / 0.7);
 }
 
 export interface LinkResult {
@@ -60,8 +87,10 @@ export interface LinkResult {
  * * obstacle / terrain losses, plus a coherent ray reflected off the local surface (track surface
  * or terrain beside it, each with its own ground material).
  */
-export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, axisW: Vec3): number {
+export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, poseIn: TagPose | Vec3): number {
   const { tag, lambda, k, env, geom } = ctx;
+  const pose = toPose(poseIn);
+  const axisW = pose.axis;
   const path = (src: Vec3, dst: Vec3, reflect: boolean) => {
     const dx = dst[0] - src[0], dy = dst[1] - src[1], dz = dst[2] - src[2];
     const d = Math.max(Math.hypot(dx, dy, dz), 0.05);
@@ -70,7 +99,8 @@ export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, axisW: Ve
     const local = mulMatT(a.rot, reflect ? [u[0], -u[1], u[2]] : u);
     const ga = antennaGainDb(a.profile, local);
     // direction arriving at the tag (from tag towards the source)
-    const gt = tagGainDb(tag.gainDbi, tag.axis, axisW, [-u[0], -u[1], -u[2]]);
+    const toSrc: Vec3 = [-u[0], -u[1], -u[2]];
+    const gt = tagGainDb(tag.gainDbi, tag.axis, axisW, toSrc) - bikeShadowDb(tag, pose, toSrc);
     const amp = Math.sqrt(dbToLin(ga + gt)) * (lambda / (4 * Math.PI * d));
     return { amp, phase: -k * d };
   };
@@ -120,10 +150,29 @@ export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, axisW: Ve
   return re * re + im * im;
 }
 
-export function evalLink(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, axisW: Vec3): LinkResult {
+/**
+ * Detuning of a dipole inlay (e.g. Dogbone) near metal, in dB per direction. Directly on metal the
+ * antenna is practically shorted; a few centimetres of spacer recover most of the performance.
+ * Typical values for 865–868 MHz dipole inlays – verify with the real holder.
+ */
+const METAL_CURVE: [number, number][] = [[0, 25], [2, 16], [5, 10], [10, 6], [20, 3], [40, 1], [80, 0]];
+export function metalDetuneDb(tag: TagProfile): number {
+  if (!tag.nearMetal) return 0;
+  const g = Math.max(0, tag.metalGapMm ?? 0);
+  for (let i = 1; i < METAL_CURVE.length; i++) {
+    const [g1, l1] = METAL_CURVE[i];
+    if (g <= g1) {
+      const [g0, l0] = METAL_CURVE[i - 1];
+      return l0 + ((l1 - l0) * (g - g0)) / (g1 - g0);
+    }
+  }
+  return 0;
+}
+
+export function evalLink(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, pose: TagPose | Vec3): LinkResult {
   const { tag, env } = ctx;
-  const hDb = linToDb(channelGain(ctx, a, tagPos, axisW));
-  const lossOneWay = a.antenna.cableLossDb + tag.polLossDb + tag.bodyLossDb;
+  const hDb = linToDb(channelGain(ctx, a, tagPos, pose));
+  const lossOneWay = a.antenna.cableLossDb + tag.polLossDb + tag.bodyLossDb + metalDetuneDb(tag);
   const pTagDbm = a.antenna.txDbm - lossOneWay + hDb;
   const rssiDbm = a.antenna.txDbm - 2 * lossOneWay - tag.backscatterLossDb + 2 * hDb;
   const margin = Math.min(pTagDbm - tag.sensitivityDbm, rssiDbm - env.readerSensDbm);

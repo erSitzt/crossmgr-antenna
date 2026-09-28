@@ -154,6 +154,15 @@ function withGround(s: Setup): Setup {
   return {
     ...s,
     obstacles: s.obstacles ?? [],
+    tag: {
+      ...s.tag,
+      tiltBackDeg: s.tag.tiltBackDeg ?? 0,
+      mount: s.tag.mount ?? (s.tag.axis === 'lateral' ? 'front-plate' : s.tag.heightM > 1.2 ? 'helmet' : 'fork'),
+      side: s.tag.side ?? 'none',
+      shadowDb: s.tag.shadowDb ?? 0,
+      nearMetal: s.tag.nearMetal ?? false,
+      metalGapMm: s.tag.metalGapMm ?? 0,
+    },
     sim: { ...s.sim, includeLanes: s.sim.includeLanes ?? true, lines: s.sim.lines ?? [], randomLines: s.sim.randomLines ?? 0 },
     env: {
       ...env,

@@ -41,7 +41,7 @@ describe('pattern', () => {
 function singleAntennaSetup(): Setup {
   const s = makeDefaultSetup();
   s.antennas = [{ ...s.antennas[0], position: [0, 1, 0], yawDeg: 0, pitchDeg: 0, txDbm: 30 }];
-  s.tag = { ...s.tag, axis: 'isotropic', bodyLossDb: 0 };
+  s.tag = { ...s.tag, axis: 'isotropic', bodyLossDb: 0, sensitivityDbm: -18, shadowDb: 0, side: 'none', nearMetal: false };
   s.env = { ...s.env, groundReflection: false };
   return s;
 }
@@ -185,7 +185,7 @@ describe('fields and simulation', () => {
   it('symmetric side antennas at the finish give a small timing error', () => {
     const s = makeDefaultSetup();
     s.antennas = s.antennas.slice(0, 1).map((a) => ({ ...a, pitchDeg: 0, yawDeg: 0, txDbm: 31 }));
-    s.tag = { ...s.tag, axis: 'vertical' };
+    s.tag = { ...s.tag, axis: 'vertical', tiltBackDeg: 0, side: 'none', nearMetal: false };
     s.sim = { ...s.sim, lanes: 3, trials: 5 };
     const r = runPassSim(s);
     expect(r.missRate).toBe(0);
