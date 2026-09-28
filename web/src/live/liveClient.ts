@@ -20,6 +20,14 @@ export interface Pass {
   lastWallMs: number; // browser time of the last read (to close passes when the tag goes quiet)
 }
 
+export interface PassTruth {
+  epc: string;
+  crossUs: number; // true finish crossing (reader clock)
+  speedMs: number;
+  label: string; // lane / line the rider used
+  lateralM: number | null; // lane marked for calibration (straight lanes only)
+}
+
 export interface ReaderStatus {
   connected: boolean;
   running: boolean;
@@ -38,6 +46,8 @@ interface LiveState {
   totalReads: number;
   recording: RawRead[];
   currentLane: number | null;
+  source: 'backend' | 'sim';
+  truths: PassTruth[]; // simulated reader: true finish crossings, for comparing the estimate
   gapMs: number;
   openSocket: () => void;
   send: (msg: Record<string, unknown>) => void;
@@ -66,6 +76,8 @@ export const useLive = create<LiveState>((set, get) => ({
   totalReads: 0,
   recording: [],
   currentLane: null,
+  source: 'backend',
+  truths: [],
   gapMs: 1000,
 
   openSocket: () => {
@@ -95,14 +107,16 @@ export const useLive = create<LiveState>((set, get) => ({
     const ws = get().socket;
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   },
-  clear: () => set({ passes: [], recording: [], totalReads: 0 }),
+  clear: () => set({ passes: [], recording: [], totalReads: 0, truths: [] }),
   setLane: (l) => set({ currentLane: l }),
   setPassLane: (id, l) => set({ passes: get().passes.map((p) => (p.id === id ? { ...p, lateralM: l } : p)) }),
   deletePass: (id) => set({ passes: get().passes.filter((p) => p.id !== id) }),
 }));
 
 /** Group reads into passes per EPC; a pass closes after `gapMs` without reads of that tag. */
-function ingest(reads: RawRead[]) {
+export const ingestReads = (reads: RawRead[], laneFor?: (epc: string) => number | null | undefined) => ingest(reads, laneFor);
+
+function ingest(reads: RawRead[], laneFor?: (epc: string) => number | null | undefined) {
   const st = useLive.getState();
   const gapUs = st.gapMs * 1000;
   const passes = st.passes.slice();
@@ -113,7 +127,7 @@ function ingest(reads: RawRead[]) {
       p = undefined;
     }
     if (!p) {
-      p = { id: passId++, epc: r.epc, reads: [], startTs: r.ts, endTs: r.ts, closed: false, lateralM: st.currentLane, estimateUs: null, lastWallMs: 0 };
+      p = { id: passId++, epc: r.epc, reads: [], startTs: r.ts, endTs: r.ts, closed: false, lateralM: laneFor?.(r.epc) ?? st.currentLane, estimateUs: null, lastWallMs: 0 };
       passes.push(p);
     }
     p.reads.push(r);

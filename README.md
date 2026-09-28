@@ -169,7 +169,20 @@ More antennas are not automatically better: the reader switches between ports, s
 5. Re-run **Simulation → Optimise power**, apply, push to the reader again and verify.
 6. Enter the final per-port powers in CrossMgrImpinj.
 
-The *Mock reader* option generates synthetic passes for testing without hardware.
+### Rehearsal without hardware: simulated reader
+
+*Live reader → Source: Simulated from model* emulates the reader in the browser (no backend, no hardware).
+
+- **How it works:** simulated riders ride through your current setup (antennas, arch, track and elevation, obstacles, ground, tag or both tags, bike shadow, metal). They use the Simulation tab's speed (± variation), timing method and antenna choice. Their reads stream in real time into the same pass list, RSSI chart, recording and calibration as a real reader.
+- **Timing error:** the true finish crossing is known, so each pass shows its timing error (estimate vs. truth), with a mean and spread over all passes.
+- **Riders use:**
+  - *straight lanes*: marked automatically, or the *Next pass lane* you pick, for calibration;
+  - *lanes + rider lines*: unmarked, for realistic traffic.
+- **Real world vs. model:** an extra one-way loss per port that the "real" reader has but the model doesn't (e.g. a longer cable). It's for rehearsing the calibration. Example: +3 dB on port 2 → the calibration shows ≈ −6 dB RSSI on port 2 and suggests ≈ +3 dB cable loss.
+
+Calibration compares a robust per-port peak (quadratic-fit vertex, or the mean of the three strongest reads) with the model's peak, instead of the single strongest read. A single noisy read therefore doesn't bias it.
+
+The *Mock reader* checkbox (source *Impinj reader / backend*) is the backend's simple random generator. It only tests the backend connection and is not based on the model.
 
 ## Caveats
 

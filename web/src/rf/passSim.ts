@@ -50,10 +50,18 @@ const std = (a: number[]) => {
 };
 
 /** One simulated pass along a trajectory; read times are relative to the true finish crossing. */
-function simulatePass(ctx: LinkCtx, path: TrackPath, setup: Setup, tr: Trajectory, crossS: number, seed: number): Read[] {
+export function simulatePass(
+  ctx: LinkCtx,
+  path: TrackPath,
+  setup: Setup,
+  tr: Trajectory,
+  crossS: number,
+  seed: number,
+  speedKmh?: number,
+): Read[] {
   const rng = makeRng(seed);
   const { sim, readerProfile: rp, tag } = setup;
-  const v = sim.speedKmh / 3.6;
+  const v = (speedKmh ?? sim.speedKmh) / 3.6;
   const range = sim.rangeM;
   const dt = 1 / rp.readsPerSecond;
   const nAnt = ctx.antennas.length;
