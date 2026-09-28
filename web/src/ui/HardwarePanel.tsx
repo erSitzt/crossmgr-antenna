@@ -1,6 +1,7 @@
-import type { Antenna, TagAxis, Truss, TrussMember } from '../model/types';
+import type { Antenna, GroundSettings, Obstacle, ObstacleBase, TagAxis, Truss, TrussMember } from '../model/types';
+import { materialById, OBSTACLE_MATERIALS } from '../presets/obstacles';
 import { READER_PROFILES, TAG_PRESETS } from '../presets/profiles';
-import { GROUND_PRESETS, groundReflection } from '../rf/ground';
+import { GROUND_PRESETS, groundPreset, groundReflection } from '../rf/ground';
 import { eirpLinearDbm } from '../rf/link';
 import { wavelength } from '../rf/math';
 import { portColor, useStore } from '../store';
@@ -12,11 +13,13 @@ export function HardwarePanel() {
   const select = useStore((s) => s.select);
   const addAntenna = useStore((s) => s.addAntenna);
   const addTruss = useStore((s) => s.addTruss);
+  const addObstacle = useStore((s) => s.addObstacle);
   const mode = useStore((s) => s.transformMode);
   const setMode = useStore((s) => s.setTransformMode);
 
   const ant = setup.antennas.find((a) => a.id === selectedId);
   const truss = setup.trusses.find((t) => t.id === selectedId);
+  const obstacle = setup.obstacles.find((o) => o.id === selectedId);
 
   return (
     <>
@@ -28,10 +31,28 @@ export function HardwarePanel() {
             <button onClick={() => addAntenna('right')} title="Antenna on the right side pointing left">+ Right</button>
             <button onClick={() => addAntenna('top')} title="Overhead antenna pointing down">+ Top</button>
             <button onClick={addTruss}>+ Truss</button>
+            <select
+              className="add-select"
+              value=""
+              onChange={(e) => {
+                if (e.target.value) addObstacle(e.target.value);
+              }}
+            >
+              <option value="">+ Obstacle…</option>
+              {OBSTACLE_MATERIALS.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
           </>
         }
       >
         <ul className="objlist">
+          {setup.obstacles.map((o) => (
+            <li key={o.id} className={o.id === selectedId ? 'sel' : ''} onClick={() => select(o.id)}>
+              <span className="dot" style={{ background: materialById(o.materialId)?.color ?? '#b0b0b0', borderRadius: 2 }} /> {o.name}
+              <span className="muted"> ×{o.count}</span>
+            </li>
+          ))}
           {setup.trusses.map((t) => (
             <li key={t.id} className={t.id === selectedId ? 'sel' : ''} onClick={() => select(t.id)}>
               <span className="dot" style={{ background: '#c9ced6' }} /> {t.name}
@@ -52,6 +73,7 @@ export function HardwarePanel() {
       </Section>
       {ant && <AntennaProps a={ant} />}
       {truss && <TrussProps t={truss} />}
+      {obstacle && <ObstacleProps o={obstacle} />}
       <TagAndRf />
       <Profiles />
     </>
@@ -234,23 +256,21 @@ function TagAndRf() {
       <Check label="Ground reflection (two-ray multipath)" value={env.groundReflection} onChange={(groundReflection) => updateEnv({ groundReflection })} />
       {env.groundReflection && (
         <>
-          <Select
-            label="Ground type"
-            value={GROUND_PRESETS.some((g) => g.presetId === env.ground.presetId) ? env.ground.presetId : 'custom'}
-            options={[...GROUND_PRESETS.map((g) => ({ value: g.presetId, label: g.name })), { value: 'custom', label: 'Custom' }]}
-            onChange={(id) => {
-              const g = GROUND_PRESETS.find((x) => x.presetId === id);
-              if (g) updateEnv({ ground: { presetId: g.presetId, epsR: g.epsR, sigmaSm: g.sigmaSm, roughnessM: g.roughnessM } });
-            }}
-          />
-          <div className="grid3">
-            <NumField label="Permittivity εr" value={env.ground.epsR} min={1} max={81} step={0.5} title="Relative permittivity – rises strongly with moisture" onChange={(epsR) => updateEnv({ ground: { ...env.ground, epsR, presetId: 'custom' } })} />
-            <NumField label="Conductivity" unit="S/m" value={env.ground.sigmaSm} min={0} max={5} step={0.005} onChange={(sigmaSm) => updateEnv({ ground: { ...env.ground, sigmaSm, presetId: 'custom' } })} />
-            <NumField label="Roughness" unit="m" value={env.ground.roughnessM} min={0} max={0.5} step={0.01} title="RMS height variation (ruts, stones). Rough ground scatters instead of mirroring." onChange={(roughnessM) => updateEnv({ ground: { ...env.ground, roughnessM, presetId: 'custom' } })} />
-          </div>
-          <GroundHint />
+          <GroundEditor title="Track surface (incl. finish table)" value={env.ground} onChange={(ground) => updateEnv({ ground })} />
+          <GroundHint ground={env.ground} freqMHz={env.freqMHz} />
+          <GroundEditor title="Surroundings beside the track" value={env.terrainGround} onChange={(terrainGround) => updateEnv({ terrainGround })} />
         </>
       )}
+      <NumField
+        label="Blocked by track body"
+        unit="dB"
+        value={env.terrainBlockDb}
+        min={0}
+        max={60}
+        step={1}
+        title="Extra loss when the direct ray passes through the raised track (table edge, ramps)"
+        onChange={(terrainBlockDb) => updateEnv({ terrainBlockDb })}
+      />
     </Section>
   );
 }
@@ -292,14 +312,99 @@ function Profiles() {
 }
 
 /** Shows |Γ| for typical geometries so the effect of the ground type is visible at a glance. */
-function GroundHint() {
-  const env = useStore((s) => s.setup.env);
-  const lambda = wavelength(env.freqMHz);
-  const at = (deg: number, wTE: number) => Math.hypot(...groundReflection(env.ground, Math.sin((deg * Math.PI) / 180), wTE, lambda));
+function GroundHint({ ground, freqMHz }: { ground: GroundSettings; freqMHz: number }) {
+  const lambda = wavelength(freqMHz);
+  const at = (deg: number, wTE: number) => Math.hypot(...groundReflection(ground, Math.sin((deg * Math.PI) / 180), wTE, lambda));
   return (
     <p className="muted">
-      Reflection |Γ| at 10° / 45° grazing: horizontal pol. {at(10, 1).toFixed(2)} / {at(45, 1).toFixed(2)}, vertical pol.{' '}
-      {at(10, 0).toFixed(2)} / {at(45, 0).toFixed(2)}. Reflection is taken off the track surface at the finish.
+      Track |Γ| at 10° / 45° grazing: horizontal pol. {at(10, 1).toFixed(2)} / {at(45, 1).toFixed(2)}, vertical pol.{' '}
+      {at(10, 0).toFixed(2)} / {at(45, 0).toFixed(2)}. Each reflection uses the surface where it lands (table top, ramp or
+      ground beside).
     </p>
+  );
+}
+
+function GroundEditor({ title, value: g, onChange }: { title: string; value: GroundSettings; onChange: (g: GroundSettings) => void }) {
+  return (
+    <div className="arch">
+      <Select
+        label={title}
+        value={GROUND_PRESETS.some((x) => x.presetId === g.presetId) ? g.presetId : 'custom'}
+        options={[...GROUND_PRESETS.map((x) => ({ value: x.presetId, label: x.name })), { value: 'custom', label: 'Custom' }]}
+        onChange={(id) => {
+          if (GROUND_PRESETS.some((x) => x.presetId === id)) onChange(groundPreset(id));
+        }}
+      />
+      <div className="grid3">
+        <NumField label="Permittivity εr" value={g.epsR} min={1} max={81} step={0.5} title="Relative permittivity – rises strongly with moisture" onChange={(epsR) => onChange({ ...g, epsR, presetId: 'custom' })} />
+        <NumField label="Conductivity" unit="S/m" value={g.sigmaSm} min={0} max={5} step={0.005} onChange={(sigmaSm) => onChange({ ...g, sigmaSm, presetId: 'custom' })} />
+        <NumField label="Roughness" unit="m" value={g.roughnessM} min={0} max={0.5} step={0.01} title="RMS height variation (ruts, stones). Rough ground scatters instead of mirroring." onChange={(roughnessM) => onChange({ ...g, roughnessM, presetId: 'custom' })} />
+      </div>
+    </div>
+  );
+}
+
+function ObstacleProps({ o }: { o: Obstacle }) {
+  const update = useStore((s) => s.updateObstacle);
+  const remove = useStore((s) => s.removeObstacle);
+  const dup = useStore((s) => s.duplicateObstacle);
+  const u = (p: Partial<Obstacle>) => update(o.id, p);
+  return (
+    <Section
+      title="Obstacle"
+      actions={
+        <>
+          <button onClick={() => dup(o.id)}>Duplicate</button>
+          <button className="danger" onClick={() => remove(o.id)}>Delete</button>
+        </>
+      }
+    >
+      <label className="field">
+        <span>Name</span>
+        <input value={o.name} onChange={(e) => u({ name: e.target.value })} />
+      </label>
+      <Select
+        label="Material"
+        value={materialById(o.materialId) ? o.materialId : 'custom'}
+        options={[...OBSTACLE_MATERIALS.map((m) => ({ value: m.id, label: m.name })), { value: 'custom', label: 'Custom' }]}
+        onChange={(id) => {
+          const m = materialById(id);
+          if (m) u({ materialId: m.id, fixedDb: m.fixedDb, perMeterDb: m.perMeterDb });
+        }}
+      />
+      <div className="grid2">
+        <NumField label="Loss per crossing" unit="dB" value={o.fixedDb} min={0} max={40} step={0.5} onChange={(fixedDb) => u({ fixedDb, materialId: 'custom' })} />
+        <NumField label="Loss inside" unit="dB/m" value={o.perMeterDb} min={0} max={200} step={1} onChange={(perMeterDb) => u({ perMeterDb, materialId: 'custom' })} />
+      </div>
+      <div className="grid3">
+        <NumField label="Unit width" unit="m" value={o.sizeM[0]} min={0.05} step={0.1} onChange={(w) => u({ sizeM: [w, o.sizeM[1], o.sizeM[2]] })} />
+        <NumField label="Height" unit="m" value={o.sizeM[1]} min={0.05} step={0.1} onChange={(h) => u({ sizeM: [o.sizeM[0], h, o.sizeM[2]] })} />
+        <NumField label="Depth" unit="m" value={o.sizeM[2]} min={0.01} step={0.05} onChange={(d) => u({ sizeM: [o.sizeM[0], o.sizeM[1], d] })} />
+        <NumField label="Units in row" value={o.count} min={1} max={50} step={1} onChange={(count) => u({ count: Math.round(count) })} />
+        <NumField label="Raised by" unit="m" value={o.liftM} min={0} step={0.1} onChange={(liftM) => u({ liftM })} />
+        <NumField label="Yaw" unit="°" value={o.yawDeg} step={5} onChange={(yawDeg) => u({ yawDeg })} />
+      </div>
+      <div className="grid3">
+        <NumField label="X" unit="m" value={o.position[0]} step={0.1} onChange={(x) => u({ position: [x, o.position[1], o.position[2]] })} />
+        <NumField label="Z" unit="m" value={o.position[2]} step={0.1} onChange={(z) => u({ position: [o.position[0], o.position[1], z] })} />
+        <NumField
+          label={o.base === 'manual' ? 'Base Y' : 'Base Y (auto)'}
+          unit="m"
+          value={o.position[1]}
+          step={0.1}
+          onChange={(y) => u({ base: 'manual', position: [o.position[0], y, o.position[2]] })}
+        />
+      </div>
+      <Select<ObstacleBase>
+        label="Stands on"
+        value={o.base}
+        options={[
+          { value: 'ground', label: 'Ground beside the track (Y = 0)' },
+          { value: 'track', label: 'Track surface (e.g. on the table)' },
+          { value: 'manual', label: 'Manual elevation' },
+        ]}
+        onChange={(base) => u({ base })}
+      />
+    </Section>
   );
 }

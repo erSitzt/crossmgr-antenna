@@ -8,6 +8,7 @@ import { finishElevation, finishWidth } from '../rf/track';
 import { DEG } from '../rf/math';
 import { useStore } from '../store';
 import { AntennaMesh } from './AntennaMesh';
+import { ObstacleMesh } from './ObstacleMesh';
 import { ReadZones, SliceView } from './FieldViews';
 import { PassPaths } from './PassPaths';
 import { FinishPlane, TrackMesh } from './TrackMesh';
@@ -52,6 +53,7 @@ function SceneContent() {
   const selectedLane = useStore((s) => s.selectedLane);
   const updateAntenna = useStore((s) => s.updateAntenna);
   const updateTruss = useStore((s) => s.updateTruss);
+  const updateObstacle = useStore((s) => s.updateObstacle);
 
   const refs = useRef(new Map<string, THREE.Object3D>());
   const [target, setTarget] = useState<THREE.Object3D | null>(null);
@@ -66,12 +68,16 @@ function SceneContent() {
     setTarget(selectedId ? refs.current.get(selectedId) ?? null : null);
   }, [selectedId, setup]);
 
-  const isTruss = !!selectedId && setup.trusses.some((t) => t.id === selectedId);
+  const isObstacle = !!selectedId && setup.obstacles.some((o) => o.id === selectedId);
+  const isTruss = (!!selectedId && setup.trusses.some((t) => t.id === selectedId)) || isObstacle;
 
   const onChange = () => {
     if (!target || !selectedId) return;
     const p = target.position;
-    if (isTruss) {
+    if (isObstacle) {
+      const o = setup.obstacles.find((x) => x.id === selectedId)!;
+      updateObstacle(selectedId, { position: [r1(p.x), o.position[1], r1(p.z)], yawDeg: d1(target.rotation.y / DEG) });
+    } else if (isTruss) {
       const t = setup.trusses.find((x) => x.id === selectedId)!;
       updateTruss(selectedId, { position: [r1(p.x), t.position[1], r1(p.z)], yawDeg: d1(target.rotation.y / DEG) });
     } else {
@@ -98,6 +104,9 @@ function SceneContent() {
       <FinishPlane width={finishWidth(setup.track) + 2} y={finishElevation(setup.track)} />
       {setup.trusses.map((t) => (
         <TrussMesh key={t.id} ref={setRef(t.id)} truss={t} selected={t.id === selectedId} onSelect={(e) => { e.stopPropagation(); select(t.id); }} />
+      ))}
+      {setup.obstacles.map((o) => (
+        <ObstacleMesh key={o.id} ref={setRef(o.id)} obstacle={o} selected={o.id === selectedId} onSelect={(e) => { e.stopPropagation(); select(o.id); }} />
       ))}
       {setup.antennas.map((a) => {
         const prof = setup.antennaProfiles.find((p) => p.id === a.profileId) ?? setup.antennaProfiles[0];

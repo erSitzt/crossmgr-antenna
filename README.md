@@ -3,8 +3,8 @@
 A 3D planner for UHF RFID finish-line antennas (Impinj R420/R700 + circularly polarized panels), used with
 [CrossMgrImpinj](https://github.com/esitarski/CrossMgr/tree/master/CrossMgrImpinj) and crossmgr-interface.
 
-- **3D scene**: a track built from segments (turns, ramps, finish tables, changing width), finish arch trusses, and 2–4 antennas with position + yaw / tilt / roll (gizmo: `W` move, `E` rotate). Antennas can be mounted on the truss.
-- **RF model**: antenna pattern (gain, beamwidth, front/back), forward link (tag power-up) and reverse link (RSSI), tag dipole orientation, polarisation / body loss, ground reflection by ground type, ETSI 2 W ERP check.
+- **3D scene**: a track built from segments (turns, ramps, finish tables, changing width), finish arch trusses, obstacles (hay bales, banners, barriers, …), and 2–4 antennas with position + yaw / tilt / roll (gizmo: `W` move, `E` rotate). Antennas can be mounted on the truss.
+- **RF model**: antenna pattern (gain, beamwidth, front/back), forward link (tag power-up) and reverse link (RSSI), tag dipole orientation, polarisation / body loss, obstacle losses, blocking by the raised track, ground reflection by ground type (track surface and surroundings), ETSI 2 W ERP check.
 - **Views**: a 3D read-zone shape per antenna, plus heatmaps at tag height and in the finish plane (strongest antenna / overlap / RSSI / margin).
 - **Virtual wall**: simulated passes per lane, with the pass time estimated like CrossMgrImpinj (antenna with most reads → quadratic RSSI peak). Shows the timing offset in cm per lane.
 - **Power optimiser**: searches per-antenna Tx power (within reader/ETSI limits) for zero missed passes and the wall exactly on the finish line.
@@ -37,13 +37,21 @@ Things that follow the track:
 
 **Truss mounts.** In the *Antennas* tab, an antenna can be mounted on the left upright, right upright or crossbar at a set height or offset. Mounted antennas follow the truss when its height, span or position changes. The move gizmo then slides them along the member.
 
-**Ground type.** Ground reflection uses Fresnel coefficients from the ground's permittivity and conductivity, reduced by surface roughness, and depends on the tag's orientation. Presets:
+**Ground and finish table.** Ground reflection uses Fresnel coefficients from the ground's permittivity and conductivity, reduced by surface roughness, and depends on the tag's orientation. Each reflected ray bounces off the surface where it actually lands:
+
+- on the track (table top, ramps) → at that elevation, with the **track surface** material;
+- beside the track → on the terrain at Y = 0, with the **surroundings** material (e.g. grass).
+
+A direct ray that passes through the raised track body (an antenna below the table edge looking at a tag on the table) gets an extra loss, *Blocked by track body* (default 25 dB).
+
+Ground presets:
 
 | Preset | εr | σ (S/m) | Roughness |
 | --- | --- | --- | --- |
 | Hard-packed clay soil (moist) | 15 | 0.05 | 3 cm |
 | Wet clay / mud | 25 | 0.2 | 5 cm |
 | Dry soil / loam | 6 | 0.005 | 3 cm |
+| Grass / meadow (moist soil) | 12 | 0.02 | 5 cm |
 | Dry sand | 3.5 | 0.001 | 5 cm |
 | Wet sand | 20 | 0.05 | 5 cm |
 | Asphalt | 5 | 0.005 | 0.5 cm |
@@ -51,7 +59,24 @@ Things that follow the track:
 
 Moisture matters most: the same clay reflects much more after watering than when dry. Treat the values as starting points and correct them with the live calibration.
 
-Setup files from older versions (single turn, single width, single |Γ| value) are converted automatically on load or import.
+**Obstacles.** Add them in the *Antennas* tab (*+ Obstacle…*). Each obstacle is a row of identical boxes with a material. A ray loses *loss per crossing* plus *loss inside × metres travelled inside*, on the direct path and on both legs of the reflected path (capped at 40 dB, since signal bends around objects). Obstacles stand on the ground beside the track, on the track surface (e.g. on the table) or at a manual elevation, and can be raised (banners on a fence).
+
+| Material | per crossing | per metre |
+| --- | --- | --- |
+| Hay / straw bale (dry) | 0.5 dB | 4 dB/m |
+| Hay / straw bale (damp) | 1 dB | 15 dB/m |
+| Mesh banner (PVC) | 1.5 dB | – |
+| Solid banner / tarp (PVC) | 3 dB | – |
+| Water-filled plastic barrier | 1 dB | 60 dB/m |
+| Tyre wall | 1 dB | 10 dB/m |
+| Wooden board / pallets | 1 dB | 6 dB/m |
+| Metal crowd barrier / fence | 12 dB | – |
+| Spectators / people | 3 dB | 8 dB/m |
+| Vehicle / container / timing box (metal) | 30 dB | – |
+
+These are typical starting values; water content matters most (a damp bale absorbs far more than a dry one).
+
+Setup files from older versions (single turn, single width, single |Γ| value, no obstacles) are converted automatically on load or import.
 
 ## Run with Docker (recommended)
 
@@ -85,7 +110,7 @@ The *Mock reader* option generates synthetic passes for testing without hardware
 ## Caveats
 
 - Antenna datasheet values (beamwidth, F/B) are typical assumptions. Check them against your models in *Antenna models*.
-- The link model is free space plus one ground-reflected ray off a flat plane at the finish elevation. Ramps, table edges, bikes and riders do not block or reflect; bikes, riders and mud are a flat loss. Use the live calibration to correct the model.
+- The link model is free space plus one ground-reflected ray. Obstacles only attenuate: signal bending around them (diffraction) and reflections off them (e.g. a metal fence acting as a mirror) are not modelled. Bikes, riders and mud are a flat loss. Use the live calibration to correct the model.
 - The 3D read zones and heatmaps assume a tag travelling straight through the finish (+X). The pass simulation follows the real track curve, width and elevation.
 - The pass-time method mirrors CrossMgrImpinj's approach as understood, not its exact code.
 - The receiver sensitivity is applied as a software RSSI filter in live mode.

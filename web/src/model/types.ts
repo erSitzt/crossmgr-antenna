@@ -79,6 +79,22 @@ export interface AntennaMount {
   alongM: number;
 }
 
+export type ObstacleBase = 'track' | 'ground' | 'manual';
+
+export interface Obstacle {
+  id: string;
+  name: string;
+  materialId: string; // preset id or 'custom'
+  fixedDb: number; // loss per crossing (thin things: banners, fences)
+  perMeterDb: number; // loss per metre travelled inside (bulky things: hay, water)
+  position: Vec3; // centre of the base; Y is derived unless base = 'manual'
+  yawDeg: number;
+  sizeM: Vec3; // one unit: width (local X), height, depth (local Z)
+  count: number; // units in a row along local X
+  base: ObstacleBase; // stands on the track surface, the terrain (Y = 0) or a manual elevation
+  liftM: number; // raised above the base (e.g. banner on a fence)
+}
+
 export type SegmentKind = 'straight' | 'left' | 'right';
 
 export interface TrackSegment {
@@ -109,7 +125,9 @@ export interface GroundSettings {
 
 export interface EnvSettings {
   groundReflection: boolean;
-  ground: GroundSettings;
+  ground: GroundSettings; // track surface (incl. finish table)
+  terrainGround: GroundSettings; // surroundings beside the track
+  terrainBlockDb: number; // loss when a ray passes through the track body (table, ramps)
   readerSensDbm: number;
   freqMHz: number;
   etsiLimitEirpDbm: number; // 2 W ERP = 35.15 dBm EIRP
@@ -132,6 +150,7 @@ export interface Setup {
   track: Track;
   trusses: Truss[];
   antennas: Antenna[];
+  obstacles: Obstacle[];
   antennaProfiles: AntennaProfile[];
   readerProfile: ReaderProfile;
   tag: TagProfile;

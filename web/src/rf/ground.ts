@@ -9,11 +9,17 @@ export const GROUND_PRESETS: (GroundSettings & { name: string })[] = [
   { presetId: 'clay-moist', name: 'Hard-packed clay soil (moist)', epsR: 15, sigmaSm: 0.05, roughnessM: 0.03 },
   { presetId: 'clay-wet', name: 'Wet clay / mud (after rain, watered)', epsR: 25, sigmaSm: 0.2, roughnessM: 0.05 },
   { presetId: 'soil-dry', name: 'Dry soil / loam', epsR: 6, sigmaSm: 0.005, roughnessM: 0.03 },
+  { presetId: 'grass', name: 'Grass / meadow (moist soil)', epsR: 12, sigmaSm: 0.02, roughnessM: 0.05 },
   { presetId: 'sand-dry', name: 'Dry sand', epsR: 3.5, sigmaSm: 0.001, roughnessM: 0.05 },
   { presetId: 'sand-wet', name: 'Wet sand', epsR: 20, sigmaSm: 0.05, roughnessM: 0.05 },
   { presetId: 'asphalt', name: 'Asphalt', epsR: 5, sigmaSm: 0.005, roughnessM: 0.005 },
   { presetId: 'concrete', name: 'Concrete', epsR: 6.5, sigmaSm: 0.02, roughnessM: 0.005 },
 ];
+
+export function groundPreset(id: string): GroundSettings {
+  const g = GROUND_PRESETS.find((x) => x.presetId === id) ?? GROUND_PRESETS[0];
+  return { presetId: g.presetId, epsR: g.epsR, sigmaSm: g.sigmaSm, roughnessM: g.roughnessM };
+}
 
 type C = [number, number];
 const mul = (a: C, b: C): C => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];

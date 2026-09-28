@@ -1,5 +1,5 @@
 import { ANTENNA_PROFILES } from '../presets/profiles';
-import { GROUND_PRESETS } from '../rf/ground';
+import { groundPreset } from '../rf/ground';
 import { newId } from './ids';
 import { boresight, DEG } from '../rf/math';
 import { TrackPath } from '../rf/track';
@@ -50,6 +50,17 @@ export function normalizeSetup(setup: Setup): Setup {
     changed = true;
     return { ...t, position: [t.position[0], y, t.position[2]] as Vec3 };
   });
+  const obstacles = (setup.obstacles ?? []).map((o) => {
+    if (o.base === 'manual') return o;
+    let y = 0;
+    if (o.base === 'track') {
+      path ??= new TrackPath(setup.track);
+      y = r3(path.elevation(path.nearestS(o.position[0], o.position[2])));
+    }
+    if (y === o.position[1]) return o;
+    changed = true;
+    return { ...o, position: [o.position[0], y, o.position[2]] as Vec3 };
+  });
   const antennas = setup.antennas.map((a) => {
     if (!a.mount) return a;
     const t = trusses.find((x) => x.id === a.mount!.trussId);
@@ -63,7 +74,7 @@ export function normalizeSetup(setup: Setup): Setup {
     changed = true;
     return { ...a, position: pos };
   });
-  return changed ? { ...setup, trusses, antennas } : setup;
+  return changed ? { ...setup, trusses, antennas, obstacles } : setup;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -139,7 +150,15 @@ function withSegmentWidths(s: Setup): Setup {
 
 /** Older files had a single |Γ| value instead of a ground model. */
 function withGround(s: Setup): Setup {
-  if (s.env?.ground) return s;
   const { groundGamma: _old, ...env } = s.env as Setup['env'] & { groundGamma?: number };
-  return { ...s, env: { ...env, ground: { ...GROUND_PRESETS[0] } } };
+  return {
+    ...s,
+    obstacles: s.obstacles ?? [],
+    env: {
+      ...env,
+      ground: env.ground ?? groundPreset('clay-moist'),
+      terrainGround: env.terrainGround ?? groundPreset('grass'),
+      terrainBlockDb: env.terrainBlockDb ?? 25,
+    },
+  };
 }

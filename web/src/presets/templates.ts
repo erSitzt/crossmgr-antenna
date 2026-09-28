@@ -1,7 +1,7 @@
 import { newId } from '../model/ids';
 import { normalizeSetup } from '../model/normalize';
 import type { Antenna, Setup, Track, TrackSegment, Truss } from '../model/types';
-import { GROUND_PRESETS } from '../rf/ground';
+import { groundPreset } from '../rf/ground';
 import { ANTENNA_PROFILES, READER_PROFILES, TAG_PRESETS } from './profiles';
 
 export { newId };
@@ -102,12 +102,15 @@ export function makeDefaultSetup(preset: TrackPreset = 'straight'): Setup {
       makeAntenna({ port: 2, name: 'Left high', position: [0, 0, 0], pitchDeg: 15, mount: mount('left', 1.8) }),
       makeAntenna({ port: 3, name: 'Top centre', position: [0, 0, 0], pitchDeg: 90, mount: mount('top', 0) }),
     ],
+    obstacles: [],
     antennaProfiles: ANTENNA_PROFILES.map((p) => ({ ...p })),
     readerProfile: { ...READER_PROFILES[0] },
     tag: { ...TAG_PRESETS[1] },
     env: {
       groundReflection: true,
-      ground: { ...GROUND_PRESETS[0] },
+      ground: groundPreset('clay-moist'),
+      terrainGround: groundPreset('grass'),
+      terrainBlockDb: 25,
       readerSensDbm: -70,
       freqMHz: 866.5,
       etsiLimitEirpDbm: 35.15,

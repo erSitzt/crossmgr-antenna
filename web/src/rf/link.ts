@@ -2,6 +2,7 @@ import type { Antenna, AntennaProfile, EnvSettings, Setup, TagAxis, TagProfile, 
 import { dbToLin, linToDb, mulMatT, rotYXZ, wavelength, type Mat3 } from './math';
 import { groundReflection } from './ground';
 import { antennaGainDb, tagGainDb } from './pattern';
+import { buildSceneGeom, obstacleLossDb, surfaceAt, throughTrackBody, type SceneGeom } from './sceneGeom';
 import { finishElevation } from './track';
 
 /** Precomputed per-antenna state for fast link evaluation. */
@@ -18,7 +19,8 @@ export interface LinkCtx {
   env: EnvSettings;
   lambda: number;
   k: number;
-  groundY: number; // reflecting ground plane (track surface at the finish)
+  groundY: number; // track surface at the finish (first guess for reflection points)
+  geom: SceneGeom; // track height map + obstacles
 }
 
 export function buildLinkCtx(setup: Setup, overrides?: { txDbm?: Record<string, number> }): LinkCtx {
@@ -31,7 +33,7 @@ export function buildLinkCtx(setup: Setup, overrides?: { txDbm?: Record<string, 
       const antenna = tx === undefined ? a : { ...a, txDbm: tx };
       return { antenna, profile, rot: rotYXZ(a.yawDeg, a.pitchDeg, a.rollDeg), pos: a.position };
     });
-  return { antennas, tag: setup.tag, env: setup.env, lambda, k: (2 * Math.PI) / lambda, groundY: finishElevation(setup.track) };
+  return { antennas, tag: setup.tag, env: setup.env, lambda, k: (2 * Math.PI) / lambda, groundY: finishElevation(setup.track), geom: buildSceneGeom(setup) };
 }
 
 export function tagAxisWorld(axis: TagAxis, dir: Vec3, right: Vec3): Vec3 {
@@ -54,11 +56,12 @@ export interface LinkResult {
 }
 
 /**
- * Channel power gain |h|^2 (linear) between antenna and tag: antenna gain * tag gain * free-space,
- * optionally plus a coherent ground-reflected ray (image method, reflection coefficient -gamma).
+ * Channel power gain |h|^2 (linear) between antenna and tag: antenna gain * tag gain * free space
+ * * obstacle / terrain losses, plus a coherent ray reflected off the local surface (track surface
+ * or terrain beside it, each with its own ground material).
  */
 export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, axisW: Vec3): number {
-  const { tag, lambda, k, env } = ctx;
+  const { tag, lambda, k, env, geom } = ctx;
   const path = (src: Vec3, dst: Vec3, reflect: boolean) => {
     const dx = dst[0] - src[0], dy = dst[1] - src[1], dz = dst[2] - src[2];
     const d = Math.max(Math.hypot(dx, dy, dz), 0.05);
@@ -72,11 +75,30 @@ export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, axisW: Ve
     return { amp, phase: -k * d };
   };
   const direct = path(a.pos, tagPos, false);
-  if (!env.groundReflection) return direct.amp * direct.amp;
-  const hA = a.pos[1] - ctx.groundY, hT = tagPos[1] - ctx.groundY;
-  if (hA <= 0 || hT <= 0) return direct.amp * direct.amp;
-  const image: Vec3 = [a.pos[0], 2 * ctx.groundY - a.pos[1], a.pos[2]];
-  const refl = path(image, tagPos, true);
+  let directLoss = obstacleLossDb(geom.boxes, a.pos, tagPos);
+  if (throughTrackBody(geom.map, a.pos, tagPos)) directLoss += env.terrainBlockDb;
+  const dAmp = direct.amp * Math.pow(10, -directLoss / 20);
+  if (!env.groundReflection) return dAmp * dAmp;
+
+  // specular point: start with the plane at the finish surface, then snap to the local surface
+  let planeY = ctx.groundY;
+  let refl: { y: number; onTrack: boolean; p: Vec3 } | null = null;
+  for (let iter = 0; iter < 2; iter++) {
+    const hA = a.pos[1] - planeY, hT = tagPos[1] - planeY;
+    if (hA <= 0 || hT <= 0) { refl = null; break; }
+    const t = hA / (hA + hT);
+    const p: Vec3 = [a.pos[0] + (tagPos[0] - a.pos[0]) * t, planeY, a.pos[2] + (tagPos[2] - a.pos[2]) * t];
+    const surf = surfaceAt(geom.map, p[0], p[2]);
+    refl = { y: surf.y, onTrack: surf.onTrack, p: [p[0], surf.y, p[2]] };
+    if (Math.abs(surf.y - planeY) < 0.02) break;
+    planeY = surf.y;
+  }
+  if (!refl) return dAmp * dAmp;
+  const hA = a.pos[1] - refl.y, hT = tagPos[1] - refl.y;
+  if (hA <= 0 || hT <= 0) return dAmp * dAmp;
+  const image: Vec3 = [a.pos[0], 2 * refl.y - a.pos[1], a.pos[2]];
+  const r = path(image, tagPos, true);
+  const reflLoss = Math.min(obstacleLossDb(geom.boxes, a.pos, refl.p) + obstacleLossDb(geom.boxes, refl.p, tagPos), 40);
   const dx = tagPos[0] - a.pos[0], dz = tagPos[2] - a.pos[2];
   const dh = Math.hypot(dx, dz);
   const d2 = Math.hypot(dh, hA + hT);
@@ -89,10 +111,12 @@ export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, axisW: Ve
       wTE = (axisW[0] * n[0] + axisW[2] * n[1]) ** 2 / Math.max(1e-9, axisW[0] ** 2 + axisW[1] ** 2 + axisW[2] ** 2);
     }
   }
-  const [gr, gi] = groundReflection(env.ground, (hA + hT) / d2, wTE, lambda);
-  const cr = Math.cos(refl.phase), ci = Math.sin(refl.phase);
-  const re = direct.amp * Math.cos(direct.phase) + refl.amp * (gr * cr - gi * ci);
-  const im = direct.amp * Math.sin(direct.phase) + refl.amp * (gr * ci + gi * cr);
+  const ground = refl.onTrack ? env.ground : env.terrainGround;
+  const [gr, gi] = groundReflection(ground, (hA + hT) / d2, wTE, lambda);
+  const rAmp = r.amp * Math.pow(10, -reflLoss / 20);
+  const cr = Math.cos(r.phase), ci = Math.sin(r.phase);
+  const re = dAmp * Math.cos(direct.phase) + rAmp * (gr * cr - gi * ci);
+  const im = dAmp * Math.sin(direct.phase) + rAmp * (gr * ci + gi * cr);
   return re * re + im * im;
 }
 

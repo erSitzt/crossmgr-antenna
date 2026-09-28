@@ -99,3 +99,4 @@ button.link:hover { text-decoration: underline; }
 .arch { background: var(--panel-2); border-radius: 6px; padding: 4px 8px; margin: 6px 0; }
 .arch .row { justify-content: space-between; margin: 2px 0; }
 .mounted { color: var(--muted); font-size: 11px; }
+.add-select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 4px 6px; font: inherit; }

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { migrateSetup, normalizeSetup } from './model/normalize';
+import { OBSTACLE_MATERIALS } from './presets/obstacles';
 import { finishWidth } from './rf/track';
-import type { Antenna, AntennaProfile, EnvSettings, ReaderProfile, Setup, SimSettings, TagProfile, Track, TrackSegment, Truss } from './model/types';
+import type { Antenna, AntennaProfile, EnvSettings, Obstacle, ReaderProfile, Setup, SimSettings, TagProfile, Track, TrackSegment, Truss } from './model/types';
 import { makeAntenna, makeDefaultSetup, makeSegment, makeTrack, makeTruss, newId, type TrackPreset } from './presets/templates';
 import type { SliceData, ZoneMesh } from './rf/grid';
 import type { OptimizeProgress, SimResult } from './rf/passSim';
@@ -59,6 +60,10 @@ interface State {
   duplicateAntenna: (id: string) => void;
   removeAntenna: (id: string) => void;
   applyTxPowers: (tx: Record<string, number>) => void;
+  addObstacle: (materialId: string) => void;
+  updateObstacle: (id: string, p: Partial<Obstacle>) => void;
+  duplicateObstacle: (id: string) => void;
+  removeObstacle: (id: string) => void;
   updateTruss: (id: string, p: Partial<Truss>) => void;
   addTruss: () => void;
   removeTruss: (id: string) => void;
@@ -196,6 +201,45 @@ export const useStore = create<State>((set, get) => {
     },
     applyTxPowers: (tx) =>
       mut((s) => ({ ...s, antennas: s.antennas.map((a) => (tx[a.id] !== undefined ? { ...a, txDbm: tx[a.id] } : a)) })),
+    addObstacle: (materialId) => {
+      const s = get().setup;
+      const m = OBSTACLE_MATERIALS.find((x) => x.id === materialId) ?? OBSTACLE_MATERIALS[0];
+      const n = s.obstacles.length;
+      const o: Obstacle = {
+        id: newId('obs'),
+        name: m.name,
+        materialId: m.id,
+        fixedDb: m.fixedDb,
+        perMeterDb: m.perMeterDb,
+        position: [-6 + (n % 4) * 3, 0, -(finishWidth(s.track) / 2 + m.defaultSize[2] / 2 + 0.5)],
+        yawDeg: 0,
+        sizeM: [...m.defaultSize],
+        count: m.defaultCount,
+        base: 'ground',
+        liftM: m.defaultLift,
+      };
+      set({ setup: normalizeSetup({ ...s, obstacles: [...s.obstacles, o] }), selectedId: o.id });
+    },
+    updateObstacle: (id, p) =>
+      mut((s) => ({ ...s, obstacles: s.obstacles.map((o) => (o.id === id ? { ...o, ...p } : o)) })),
+    duplicateObstacle: (id) => {
+      const s = get().setup;
+      const src = s.obstacles.find((o) => o.id === id);
+      if (!src) return;
+      // place the copy next to the original along its row direction
+      const len = src.sizeM[0] * src.count + 0.2;
+      const c = Math.cos((src.yawDeg * Math.PI) / 180), sn = Math.sin((src.yawDeg * Math.PI) / 180);
+      const o: Obstacle = {
+        ...src,
+        id: newId('obs'),
+        position: [src.position[0] + c * len, src.position[1], src.position[2] - sn * len],
+      };
+      set({ setup: normalizeSetup({ ...s, obstacles: [...s.obstacles, o] }), selectedId: o.id });
+    },
+    removeObstacle: (id) => {
+      mut((s) => ({ ...s, obstacles: s.obstacles.filter((o) => o.id !== id) }));
+      if (get().selectedId === id) set({ selectedId: null });
+    },
     updateTruss: (id, p) =>
       mut((s) => ({ ...s, trusses: s.trusses.map((t) => (t.id === id ? { ...t, ...p } : t)) })),
     addTruss: () => {
