@@ -9,6 +9,7 @@ import { DEG } from '../rf/math';
 import { useStore } from '../store';
 import { AntennaMesh } from './AntennaMesh';
 import { BikeWithTag } from './BikeMesh';
+import { useRiderModelAvailable } from './RealBike';
 import { CENTRE_LINE } from '../rf/lines';
 import { ObstacleMesh } from './ObstacleMesh';
 import { ReadZones, SliceView } from './FieldViews';
@@ -43,6 +44,7 @@ function CameraRig({ preset, nonce }: { preset: CameraPreset; nonce: number }) {
 }
 
 function SceneContent() {
+  const riderAvailable = useRiderModelAvailable();
   const setup = useStore((s) => s.setup);
   const selectedId = useStore((s) => s.selectedId);
   const select = useStore((s) => s.select);
@@ -136,6 +138,7 @@ function SceneContent() {
           rider={view.bikeRider}
           showLinks={view.bikeLinks}
           real={view.realBike}
+          realRider={view.realRider && riderAvailable}
         />
       )}
       {target && (

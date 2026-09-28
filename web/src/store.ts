@@ -25,6 +25,7 @@ export interface ViewSettings {
   bikeRider: boolean;
   bikeLinks: boolean;
   realBike: boolean;
+  realRider: boolean;
   bikeS: number; // bike position relative to its line's finish crossing (m, − = before)
 }
 
@@ -55,6 +56,8 @@ interface State {
   setName: (name: string) => void;
   updateTrack: (p: Partial<Track>) => void;
   updateTag: (p: Partial<TagProfile>) => void;
+  updateTag2: (p: Partial<TagProfile>) => void;
+  setTag2Enabled: (on: boolean) => void;
   updateEnv: (p: Partial<EnvSettings>) => void;
   updateSim: (p: Partial<SimSettings>) => void;
   updateReader: (p: Partial<ReaderProfile>) => void;
@@ -111,6 +114,7 @@ export const useStore = create<State>((set, get) => {
       bikeRider: true,
       bikeLinks: true,
       realBike: true,
+      realRider: true,
       bikeS: -2,
     },
     zones: [],
@@ -162,6 +166,8 @@ export const useStore = create<State>((set, get) => {
     setName: (name) => mut((s) => ({ ...s, name })),
     updateTrack: (p) => mut((s) => ({ ...s, track: { ...s.track, ...p } })),
     updateTag: (p) => mut((s) => ({ ...s, tag: { ...s.tag, ...p } })),
+    updateTag2: (p) => mut((s) => ({ ...s, tag2: { ...s.tag2, ...p } })),
+    setTag2Enabled: (on) => mut((s) => ({ ...s, tag2Enabled: on })),
     updateEnv: (p) => mut((s) => ({ ...s, env: { ...s.env, ...p } })),
     updateSim: (p) => mut((s) => ({ ...s, sim: { ...s.sim, ...p } })),
     updateReader: (p) => mut((s) => ({ ...s, readerProfile: { ...s.readerProfile, ...p } })),

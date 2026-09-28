@@ -87,8 +87,8 @@ export interface LinkResult {
  * * obstacle / terrain losses, plus a coherent ray reflected off the local surface (track surface
  * or terrain beside it, each with its own ground material).
  */
-export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, poseIn: TagPose | Vec3): number {
-  const { tag, lambda, k, env, geom } = ctx;
+export function channelGain(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, poseIn: TagPose | Vec3, tag: TagProfile = ctx.tag): number {
+  const { lambda, k, env, geom } = ctx;
   const pose = toPose(poseIn);
   const axisW = pose.axis;
   const path = (src: Vec3, dst: Vec3, reflect: boolean) => {
@@ -169,9 +169,9 @@ export function metalDetuneDb(tag: TagProfile): number {
   return 0;
 }
 
-export function evalLink(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, pose: TagPose | Vec3): LinkResult {
-  const { tag, env } = ctx;
-  const hDb = linToDb(channelGain(ctx, a, tagPos, pose));
+export function evalLink(ctx: LinkCtx, a: AntennaCtx, tagPos: Vec3, pose: TagPose | Vec3, tag: TagProfile = ctx.tag): LinkResult {
+  const { env } = ctx;
+  const hDb = linToDb(channelGain(ctx, a, tagPos, pose, tag));
   const lossOneWay = a.antenna.cableLossDb + tag.polLossDb + tag.bodyLossDb + metalDetuneDb(tag);
   const pTagDbm = a.antenna.txDbm - lossOneWay + hDb;
   const rssiDbm = a.antenna.txDbm - 2 * lossOneWay - tag.backscatterLossDb + 2 * hDb;

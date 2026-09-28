@@ -5,7 +5,7 @@ import type { Setup } from '../model/types';
 import type { Trajectory } from '../rf/lines';
 import { BIKE, placeBike, tagLinks, tagLocalAxis, tagLocalPosition } from '../rf/tagView';
 import { DEG } from '../rf/math';
-import { RealBike } from './RealBike';
+import { RealBike, RiderModel } from './RealBike';
 
 const PLASTIC = '#e8e8e8';
 const DARK = '#2a2d33';
@@ -24,7 +24,7 @@ function Rod({ from, to, r, color }: { from: [number, number, number]; to: [numb
 }
 
 /** Simplified motocross bike (and rider) in the bike frame: X forward, Y up, Z right. */
-function Bike({ rider, real }: { rider: boolean; real: boolean }) {
+function Bike({ rider, real, realRider, helmetTopY }: { rider: boolean; real: boolean; realRider: boolean; helmetTopY: number }) {
   const rake = BIKE.rakeDeg * DEG;
   const fw = BIKE.frontWheelR, rw = BIKE.rearWheelR;
   const forkTop: [number, number] = [-BIKE.forkLen * Math.sin(rake), fw + BIKE.forkLen * Math.cos(rake)];
@@ -84,70 +84,88 @@ function Bike({ rider, real }: { rider: boolean; real: boolean }) {
   return (
     <group>
       {real ? <RealBike fallback={simple} /> : simple}
-      {rider && (
-        <group>
-          {/* torso, helmet, arms, legs */}
-          <Rod from={[-1.0, 1.08, 0]} to={[-0.74, 1.55, 0]} r={0.14} color="#3e8ef7" />
-          <mesh position={[-0.62, 1.72, 0]}>
-            <sphereGeometry args={[0.14, 16, 16]} />
-            <meshStandardMaterial color="#f5a623" />
-          </mesh>
-          {[-1, 1].map((sz) => (
-            <group key={sz}>
-              <Rod from={[-0.74, 1.5, sz * 0.2]} to={[forkTop[0] - 0.05, forkTop[1] + 0.07, sz * 0.36]} r={0.045} color="#3e8ef7" />
-              <Rod from={[-1.0, 1.08, sz * 0.13]} to={[-0.78, 0.72, sz * 0.2]} r={0.07} color={DARK} />
-              <Rod from={[-0.78, 0.72, sz * 0.2]} to={[-0.95, 0.35, sz * 0.2]} r={0.06} color={DARK} />
-            </group>
-          ))}
-        </group>
-      )}
+      {rider && <RiderModel helmetTopY={helmetTopY} realRider={realRider} />}
     </group>
   );
 }
 
 const marginColor = (m: number) => (m >= 6 ? '#30a46c' : m >= 0 ? '#f5a623' : '#e5484d');
 
-export function BikeWithTag({
-  setup, traj, s, rider, showLinks, real,
-}: { setup: Setup; traj: Trajectory; s: number; rider: boolean; showLinks: boolean; real: boolean }) {
-  const { place, links, tagLocal, axis } = useMemo(() => {
-    const place = placeBike(setup, traj, s);
-    return { place, links: tagLinks(setup, place), tagLocal: tagLocalPosition(setup.tag), axis: tagLocalAxis(setup.tag) };
-  }, [setup, traj, s]);
+/** Helmet top follows a helmet-mounted tag (tag 2 first, then tag 1); default posture otherwise. */
+function helmetTopY(setup: Setup): number {
+  if (setup.tag2Enabled && setup.tag2.mount === 'helmet') return setup.tag2.heightM + 0.05;
+  if (setup.tag.mount === 'helmet') return setup.tag.heightM + 0.05;
+  return 1.75;
+}
 
-  const axisV = new THREE.Vector3(...axis);
-  const tagQuat = axisV.lengthSq() > 0 ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), axisV.clone().normalize()) : new THREE.Quaternion();
-  const tl = new THREE.Vector3(...tagLocal);
-  const tagPos = new THREE.Vector3(...place.tagPos);
+export function BikeWithTag({
+  setup, traj, s, rider, showLinks, real, realRider,
+}: { setup: Setup; traj: Trajectory; s: number; rider: boolean; showLinks: boolean; real: boolean; realRider: boolean }) {
+  const { place, links } = useMemo(() => {
+    const place = placeBike(setup, traj, s);
+    return { place, links: tagLinks(setup, place) };
+  }, [setup, traj, s]);
+  const tags = setup.tag2Enabled ? [setup.tag, setup.tag2] : [setup.tag];
+  // tag 2 is drawn relative to tag 1 (same rigid offset the simulation uses)
+  const t1 = tagLocalPosition(setup.tag);
 
   return (
     <group>
       <group position={place.origin} rotation={[0, place.yaw, 0]}>
-        <Bike rider={rider} real={real} />
-        {/* the tag: Dogbone ≈ 94 × 24 mm, drawn 2× for visibility, plus its dipole axis */}
-        <mesh position={tl} quaternion={tagQuat}>
-          <boxGeometry args={[0.19, 0.05, 0.006]} />
-          <meshBasicMaterial color="#ffffff" />
-        </mesh>
-        {axis.some((v) => v !== 0) && (
-          <Line points={[tl.clone().addScaledVector(axisV, -0.3), tl.clone().addScaledVector(axisV, 0.3)]} color="#ffd166" lineWidth={3} />
-        )}
+        <Bike rider={rider} real={real} realRider={realRider} helmetTopY={helmetTopY(setup)} />
+        {tags.map((tag, i) => {
+          const local = tagLocalPosition(tag);
+          const pos: [number, number, number] = i === 0 ? t1 : [local[0], local[1], local[2]];
+          return <TagMarker key={i} tag={tag} pos={pos} label={tags.length > 1 ? `T${i + 1}` : undefined} />;
+        })}
       </group>
       {showLinks &&
         links.map((l) => {
+          const t = new THREE.Vector3(...l.tagPos);
           const a = new THREE.Vector3(...l.antennaPos);
-          const mid = tagPos.clone().lerp(a, 0.5);
+          const mid = t.clone().lerp(a, l.tagNo === 1 ? 0.5 : 0.62);
           return (
-            <group key={l.antennaId}>
-              <Line points={[tagPos, a]} color={marginColor(l.margin)} lineWidth={2} dashed={l.margin < 0} dashSize={0.2} gapSize={0.15} />
+            <group key={`${l.tagNo}-${l.antennaId}`}>
+              <Line
+                points={[t, a]}
+                color={marginColor(l.margin)}
+                lineWidth={l.tagNo === 1 ? 2 : 1.5}
+                dashed={l.margin < 0 || l.tagNo === 2}
+                dashSize={l.tagNo === 2 ? 0.08 : 0.2}
+                gapSize={l.tagNo === 2 ? 0.08 : 0.15}
+              />
               <Html position={mid} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
                 <div className="ant-label" style={{ borderColor: marginColor(l.margin) }}>
-                  P{l.port} {l.margin >= 0 ? '+' : ''}{l.margin.toFixed(1)} dB
+                  {setup.tag2Enabled ? `T${l.tagNo} ` : ''}P{l.port} {l.margin >= 0 ? '+' : ''}{l.margin.toFixed(1)} dB
                 </div>
               </Html>
             </group>
           );
         })}
+    </group>
+  );
+}
+
+/** The tag (Dogbone ≈ 94 × 24 mm, drawn 2× for visibility) with its dipole axis. */
+function TagMarker({ tag, pos, label }: { tag: Setup['tag']; pos: [number, number, number]; label?: string }) {
+  const axis = tagLocalAxis(tag);
+  const axisV = new THREE.Vector3(...axis);
+  const quat = axisV.lengthSq() > 0 ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), axisV.clone().normalize()) : new THREE.Quaternion();
+  const p = new THREE.Vector3(...pos);
+  return (
+    <group>
+      <mesh position={p} quaternion={quat}>
+        <boxGeometry args={[0.19, 0.05, 0.006]} />
+        <meshBasicMaterial color="#ffffff" />
+      </mesh>
+      {axisV.lengthSq() > 0 && (
+        <Line points={[p.clone().addScaledVector(axisV, -0.3), p.clone().addScaledVector(axisV, 0.3)]} color="#ffd166" lineWidth={3} />
+      )}
+      {label && (
+        <Html position={[p.x, p.y + 0.12, p.z]} center distanceFactor={8} style={{ pointerEvents: 'none' }}>
+          <div className="ant-label" style={{ borderColor: '#ffd166' }}>{label}</div>
+        </Html>
+      )}
     </group>
   );
 }

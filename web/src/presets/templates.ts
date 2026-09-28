@@ -114,6 +114,8 @@ export function makeDefaultSetup(preset: TrackPreset = 'straight'): Setup {
     antennaProfiles: ANTENNA_PROFILES.map((p) => ({ ...p })),
     readerProfile: { ...READER_PROFILES[0] },
     tag: { ...(TAG_PRESETS.find((t) => t.id === 'dogbone-fork') ?? TAG_PRESETS[0]) },
+    tag2Enabled: false,
+    tag2: { ...(TAG_PRESETS.find((t) => t.id === 'dogbone-helmet') ?? TAG_PRESETS[0]) },
     env: {
       groundReflection: true,
       ground: groundPreset('clay-moist'),

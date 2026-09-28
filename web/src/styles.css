@@ -107,3 +107,4 @@ button.link:hover { text-decoration: underline; }
 .layout-list { list-style: none; padding: 0; margin: 4px 0; }
 .layout-list li { padding: 2px 0; }
 .credits a { color: var(--accent); }
+.subhead { margin: 8px 0 2px; font-weight: 600; color: var(--text); }

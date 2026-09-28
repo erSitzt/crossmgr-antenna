@@ -4,6 +4,7 @@ export interface ChartRead {
   t: number; // seconds relative to finish crossing
   port: number;
   rssi: number;
+  tagNo?: 1 | 2;
 }
 
 /** RSSI over time, one colour per reader port, with finish (t=0) and estimate markers. */
@@ -32,9 +33,13 @@ export function RssiChart({ reads, estimate, height = 170 }: { reads: ChartRead[
       <line x1={x(0)} x2={x(0)} y1={pad.t} y2={H - pad.b} className="finish" />
       {estimate != null && <line x1={x(estimate)} x2={x(estimate)} y1={pad.t} y2={H - pad.b} className="estimate" />}
       {reads.map((r, i) => (
-        <circle key={i} cx={x(r.t)} cy={y(r.rssi)} r={2.2} fill={portColor(r.port)} />
+        r.tagNo === 2 ? (
+          <circle key={i} cx={x(r.t)} cy={y(r.rssi)} r={2.4} fill="none" stroke={portColor(r.port)} strokeWidth={1.2} />
+        ) : (
+          <circle key={i} cx={x(r.t)} cy={y(r.rssi)} r={2.2} fill={portColor(r.port)} />
+        )
       ))}
-      <text x={W - pad.r} y={pad.t + 8} textAnchor="end" className="legend">ms / dBm · white = finish · red = estimate</text>
+      <text x={W - pad.r} y={pad.t + 8} textAnchor="end" className="legend">ms / dBm · white = finish · red = estimate · hollow = tag 2</text>
     </svg>
   );
 }

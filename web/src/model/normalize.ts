@@ -1,4 +1,4 @@
-import { ANTENNA_PROFILES } from '../presets/profiles';
+import { ANTENNA_PROFILES, TAG_PRESETS } from '../presets/profiles';
 import { groundPreset } from '../rf/ground';
 import { newId } from './ids';
 import { boresight, DEG } from '../rf/math';
@@ -154,6 +154,8 @@ function withGround(s: Setup): Setup {
   return {
     ...s,
     obstacles: s.obstacles ?? [],
+    tag2Enabled: s.tag2Enabled ?? false,
+    tag2: s.tag2 ?? { ...(TAG_PRESETS.find((t) => t.id === 'dogbone-helmet') ?? TAG_PRESETS[0]) },
     tag: {
       ...s.tag,
       tiltBackDeg: s.tag.tiltBackDeg ?? 0,

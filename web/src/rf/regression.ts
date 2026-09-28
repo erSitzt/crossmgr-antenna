@@ -3,6 +3,7 @@ export interface Read {
   port: number;
   antennaId: string;
   rssi: number;
+  tagNo?: 1 | 2; // which physical tag answered (same EPC – the reader cannot tell)
 }
 
 /** Least-squares fit rssi = a t^2 + b t + c. Returns null if singular. */

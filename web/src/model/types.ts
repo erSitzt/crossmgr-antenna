@@ -177,7 +177,9 @@ export interface Setup {
   obstacles: Obstacle[];
   antennaProfiles: AntennaProfile[];
   readerProfile: ReaderProfile;
-  tag: TagProfile;
+  tag: TagProfile; // tag 1 (on the bike)
+  tag2Enabled: boolean; // second tag with the same EPC (e.g. on the helmet)
+  tag2: TagProfile;
   env: EnvSettings;
   sim: SimSettings;
 }

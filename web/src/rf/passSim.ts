@@ -3,6 +3,7 @@ import { buildLinkCtx, eirpLinearDbm, evalLink, tagPose, type LinkCtx } from './
 import { estimatePassTime, type Read } from './regression';
 import { makeRng } from './rng';
 import { buildTrajectories, crossingS, fracAt, laneOffsets, trajPoint, trajState, type Trajectory } from './lines';
+import { otherTagState } from './tagView';
 import { finishWidth, TrackPath } from './track';
 
 export interface LaneResult {
@@ -59,16 +60,27 @@ function simulatePass(ctx: LinkCtx, path: TrackPath, setup: Setup, tr: Trajector
   if (nAnt === 0) return [];
   const dwell = rp.antennaDwellMs / 1000;
   const phase = rng.next() * dwell * nAnt;
+  const two = !!setup.tag2Enabled;
   const reads: Read[] = [];
   for (let t = -range / v; t <= range / v; t += dt) {
     const slot = Math.floor((t + phase) / dwell);
     const a = ctx.antennas[((slot % nAnt) + nAnt) % nAnt];
     const noise = rng.gauss() * sim.rssiNoiseDb;
-    const protocolOk = rng.next() < 0.9;
+    const protocolOk = rng.next() < (two ? 0.8 : 0.9);
     const st = trajState(path, tr, v * t, tag.heightM);
     const res = evalLink(ctx, a, st.pos, tagPose(tag, st.dir, st.right));
     if (protocolOk && res.margin + noise > 0) {
-      reads.push({ t: t - crossS / v, port: a.antenna.port, antennaId: a.antenna.id, rssi: Math.round(res.rssiDbm + noise) });
+      reads.push({ t: t - crossS / v, port: a.antenna.port, antennaId: a.antenna.id, rssi: Math.round(res.rssiDbm + noise), tagNo: 1 });
+    }
+    if (two) {
+      // same EPC: both tags answer in the same inventory round; the reader reports them as one rider
+      const noise2 = rng.gauss() * sim.rssiNoiseDb;
+      const ok2 = rng.next() < 0.8;
+      const t2 = otherTagState(tag, setup.tag2, st.pos, st.dir, st.right);
+      const res2 = evalLink(ctx, a, t2.pos, t2.pose, setup.tag2);
+      if (ok2 && res2.margin + noise2 > 0) {
+        reads.push({ t: t - crossS / v + 0.0005, port: a.antenna.port, antennaId: a.antenna.id, rssi: Math.round(res2.rssiDbm + noise2), tagNo: 2 });
+      }
     }
   }
   return reads;

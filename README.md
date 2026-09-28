@@ -120,6 +120,22 @@ The tag settings (*Antennas → Tag, reader & environment*) describe how the tag
 
 Presets for the **Avery Dennison Dogbone with Impinj M730** (−22 dBm effective sensitivity, allowing ~2 dB for mounting against the chip's ~−24 dBm): on the left fork leg (on the fork guard, 15 mm from the tube), on the front plate horizontal or vertical, and under the left side plate. Adjust the mounting values to your holders and calibrate with live reads.
 
+**Second tag with the same EPC.** Enable *Second tag* to give the rider a backup tag, e.g. the *Dogbone (M730) on helmet* preset. Tag 2 is placed rigidly relative to tag 1 on the bike/rider (the helmet is higher and ~0.3 m behind the fork). Both tags answer in the same inventory rounds. Because they share the EPC, their reads are merged before the pass time is estimated, as CrossMgrImpinj does. The RSSI chart shows tag-2 reads as hollow circles.
+
+What the simulation shows for the finish table (fork Dogbone on the fork guard + helmet Dogbone, Rx −80 dBm):
+
+| Setup | Missed | Mean offset | Spread |
+| --- | --- | --- | --- |
+| Fork tag only | 0 % | −5 cm | 21 cm |
+| Fork + helmet (quadratic, most reads) | 0 % | +46 cm | 55 cm |
+| Fork + helmet (quadratic, strongest antenna) | 0 % | +54 cm | 20 cm |
+| Fork tag directly on metal, alone | 100 % | – | – |
+| Fork tag directly on metal + helmet | 0 % | +37 cm | 43 cm |
+
+The backup tag removes misses, but the two tags reach their RSSI peak at different moments, so the merged curve is timed later and less consistently. A constant offset is harmless (move the virtual wall), a larger spread is not. Check the combination of timing method and antenna choice in the simulation before relying on two tags.
+
+**Rider.** The drawn rider's posture follows the helmet-tag height (≈ 1.6 m seated … ≈ 1.9 m standing). A real rider model can be added as `web/public/models/rider.glb` (glTF, facing +Z). It is scaled from the footpegs to the helmet top and a *Realistic rider* switch appears. Remember to credit it in `web/public/models/CREDITS.md`.
+
 **Bike view.** A simplified motocross bike (optional rider) rides on the lane or rider line selected in the simulation, at an adjustable distance to the finish. The tag is drawn at its mounting point with its dipole axis (yellow). Lines to every antenna show the link margin at that spot (green ≥ 6 dB, orange 0–6 dB, red dashed = no read). A table lists tag power, RSSI, bike shadow and margin per antenna.
 
 The bike view uses a real 3D model (*Realistic bike*, falls back to a simple drawn bike if the file is missing). It is fitted automatically: scaled to 2.18 m length, pointed forwards, front axle at the tag's reference point. To use another model, replace `web/public/models/stark-varg-mx1.glb` (glTF binary, `.glb`) and credit it in `web/public/models/CREDITS.md`.

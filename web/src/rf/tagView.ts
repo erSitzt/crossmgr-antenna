@@ -48,6 +48,20 @@ export interface BikePlacement {
   origin: Vec3; // bike origin (world, on the track surface)
   yaw: number; // rotation about Y (radians) of the bike frame
   pose: TagPose;
+  tag2: { pos: Vec3; pose: TagPose } | null; // second tag (same EPC), if enabled
+}
+
+/**
+ * World position of another tag on the same bike/rider, given tag 1's position and the bike's
+ * direction: the offset between the two mount points is applied rigidly in the bike frame.
+ */
+export function otherTagState(tag1: TagProfile, other: TagProfile, tag1Pos: Vec3, dir: Vec3, right: Vec3): { pos: Vec3; pose: TagPose } {
+  const a = tagLocalPosition(tag1), b = tagLocalPosition(other);
+  const dx = b[0] - a[0], dz = b[2] - a[2];
+  return {
+    pos: [tag1Pos[0] + dir[0] * dx + right[0] * dz, tag1Pos[1] - tag1.heightM + other.heightM, tag1Pos[2] + dir[2] * dx + right[2] * dz],
+    pose: tagPose(other, dir, right),
+  };
 }
 
 /** Places the bike so its tag sits exactly where the simulation puts the tag on the given line. */
@@ -68,10 +82,13 @@ export function placeBike(setup: Setup, tr: Trajectory, s: number): BikePlacemen
     origin: [st.pos[0] - off[0], ground, st.pos[2] - off[2]],
     yaw,
     pose: tagPose(setup.tag, st.dir, st.right),
+    tag2: setup.tag2Enabled ? otherTagState(setup.tag, setup.tag2, st.pos, st.dir, st.right) : null,
   };
 }
 
 export interface TagLink {
+  tagNo: 1 | 2;
+  tagPos: Vec3;
   antennaId: string;
   port: number;
   name: string;
@@ -82,22 +99,28 @@ export interface TagLink {
   shadowDb: number;
 }
 
-/** Link budget from the tag at its current place on the bike to every enabled antenna. */
+/** Link budget from each tag at its current place on the bike to every enabled antenna. */
 export function tagLinks(setup: Setup, place: BikePlacement): TagLink[] {
   const ctx = buildLinkCtx(setup);
-  return ctx.antennas.map((a) => {
-    const r = evalLink(ctx, a, place.tagPos, place.pose);
-    const d: Vec3 = [a.pos[0] - place.tagPos[0], a.pos[1] - place.tagPos[1], a.pos[2] - place.tagPos[2]];
-    const l = Math.hypot(...d) || 1;
-    return {
-      antennaId: a.antenna.id,
-      port: a.antenna.port,
-      name: a.antenna.name,
-      antennaPos: a.pos,
-      pTagDbm: r.pTagDbm,
-      rssiDbm: r.rssiDbm,
-      margin: r.margin,
-      shadowDb: bikeShadowDb(setup.tag, place.pose, [d[0] / l, d[1] / l, d[2] / l]),
-    };
-  });
+  const tags: { no: 1 | 2; tag: TagProfile; pos: Vec3; pose: TagPose }[] = [{ no: 1, tag: setup.tag, pos: place.tagPos, pose: place.pose }];
+  if (place.tag2) tags.push({ no: 2, tag: setup.tag2, pos: place.tag2.pos, pose: place.tag2.pose });
+  return tags.flatMap((t) =>
+    ctx.antennas.map((a) => {
+      const r = evalLink(ctx, a, t.pos, t.pose, t.tag);
+      const d: Vec3 = [a.pos[0] - t.pos[0], a.pos[1] - t.pos[1], a.pos[2] - t.pos[2]];
+      const l = Math.hypot(...d) || 1;
+      return {
+        tagNo: t.no,
+        tagPos: t.pos,
+        antennaId: a.antenna.id,
+        port: a.antenna.port,
+        name: a.antenna.name,
+        antennaPos: a.pos,
+        pTagDbm: r.pTagDbm,
+        rssiDbm: r.rssiDbm,
+        margin: r.margin,
+        shadowDb: bikeShadowDb(t.tag, t.pose, [d[0] / l, d[1] / l, d[2] / l]),
+      };
+    }),
+  );
 }
