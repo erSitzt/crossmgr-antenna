@@ -24,6 +24,7 @@ export interface ViewSettings {
   showBike: boolean;
   bikeRider: boolean;
   bikeLinks: boolean;
+  realBike: boolean;
   bikeS: number; // bike position relative to its line's finish crossing (m, − = before)
 }
 
@@ -109,6 +110,7 @@ export const useStore = create<State>((set, get) => {
       showBike: true,
       bikeRider: true,
       bikeLinks: true,
+      realBike: true,
       bikeS: -2,
     },
     zones: [],

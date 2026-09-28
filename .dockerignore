@@ -4,3 +4,6 @@ server/.venv
 **/__pycache__
 .claude
 .git
+web/public/models/source
+web/public/models/textures
+web/public/models/*.zip

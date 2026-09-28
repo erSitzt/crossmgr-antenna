@@ -135,6 +135,7 @@ function SceneContent() {
           s={(sim?.lanes[selectedLane]?.crossS ?? 0) + view.bikeS}
           rider={view.bikeRider}
           showLinks={view.bikeLinks}
+          real={view.realBike}
         />
       )}
       {target && (

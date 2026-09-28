@@ -5,6 +5,7 @@ import type { Setup } from '../model/types';
 import type { Trajectory } from '../rf/lines';
 import { BIKE, placeBike, tagLinks, tagLocalAxis, tagLocalPosition } from '../rf/tagView';
 import { DEG } from '../rf/math';
+import { RealBike } from './RealBike';
 
 const PLASTIC = '#e8e8e8';
 const DARK = '#2a2d33';
@@ -23,12 +24,12 @@ function Rod({ from, to, r, color }: { from: [number, number, number]; to: [numb
 }
 
 /** Simplified motocross bike (and rider) in the bike frame: X forward, Y up, Z right. */
-function Bike({ rider }: { rider: boolean }) {
+function Bike({ rider, real }: { rider: boolean; real: boolean }) {
   const rake = BIKE.rakeDeg * DEG;
   const fw = BIKE.frontWheelR, rw = BIKE.rearWheelR;
   const forkTop: [number, number] = [-BIKE.forkLen * Math.sin(rake), fw + BIKE.forkLen * Math.cos(rake)];
   const plateTilt = BIKE.plateTiltDeg * DEG;
-  return (
+  const simple = (
     <group>
       {/* wheels */}
       <mesh position={[0, fw, 0]}>
@@ -78,6 +79,11 @@ function Bike({ rider }: { rider: boolean }) {
         <meshStandardMaterial color={PLASTIC} />
       </mesh>
       <Rod from={[-BIKE.wheelbase, rw, 0]} to={[-0.85, 0.45, 0]} r={0.035} color={METAL} />
+    </group>
+  );
+  return (
+    <group>
+      {real ? <RealBike fallback={simple} /> : simple}
       {rider && (
         <group>
           {/* torso, helmet, arms, legs */}
@@ -102,8 +108,8 @@ function Bike({ rider }: { rider: boolean }) {
 const marginColor = (m: number) => (m >= 6 ? '#30a46c' : m >= 0 ? '#f5a623' : '#e5484d');
 
 export function BikeWithTag({
-  setup, traj, s, rider, showLinks,
-}: { setup: Setup; traj: Trajectory; s: number; rider: boolean; showLinks: boolean }) {
+  setup, traj, s, rider, showLinks, real,
+}: { setup: Setup; traj: Trajectory; s: number; rider: boolean; showLinks: boolean; real: boolean }) {
   const { place, links, tagLocal, axis } = useMemo(() => {
     const place = placeBike(setup, traj, s);
     return { place, links: tagLinks(setup, place), tagLocal: tagLocalPosition(setup.tag), axis: tagLocalAxis(setup.tag) };
@@ -117,7 +123,7 @@ export function BikeWithTag({
   return (
     <group>
       <group position={place.origin} rotation={[0, place.yaw, 0]}>
-        <Bike rider={rider} />
+        <Bike rider={rider} real={real} />
         {/* the tag: Dogbone ≈ 94 × 24 mm, drawn 2× for visibility, plus its dipole axis */}
         <mesh position={tl} quaternion={tagQuat}>
           <boxGeometry args={[0.19, 0.05, 0.006]} />

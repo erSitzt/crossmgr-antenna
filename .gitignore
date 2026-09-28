@@ -3,3 +3,8 @@ web/dist/
 server/.venv/
 __pycache__/
 *.pyc
+
+# large original 3D downloads (only the optimised .glb is committed)
+web/public/models/source/
+web/public/models/textures/
+web/public/models/*.zip

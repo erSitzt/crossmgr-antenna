@@ -122,6 +122,8 @@ Presets for the **Avery Dennison Dogbone with Impinj M730** (−22 dBm effective
 
 **Bike view.** A simplified motocross bike (optional rider) rides on the lane or rider line selected in the simulation, at an adjustable distance to the finish. The tag is drawn at its mounting point with its dipole axis (yellow). Lines to every antenna show the link margin at that spot (green ≥ 6 dB, orange 0–6 dB, red dashed = no read). A table lists tag power, RSSI, bike shadow and margin per antenna.
 
+The bike view uses a real 3D model (*Realistic bike*, falls back to a simple drawn bike if the file is missing). It is fitted automatically: scaled to 2.18 m length, pointed forwards, front axle at the tag's reference point. To use another model, replace `web/public/models/stark-varg-mx1.glb` (glTF binary, `.glb`) and credit it in `web/public/models/CREDITS.md`.
+
 Things this makes visible:
 - An antenna looking along the dipole axis (e.g. overhead antenna vs. vertical fork tag) barely reads it.
 - An antenna on the far side of a side-mounted tag loses the bike-shadow value.
@@ -160,3 +162,7 @@ The *Mock reader* option generates synthetic passes for testing without hardware
 - The 3D read zones and heatmaps assume a tag travelling straight through the finish (+X). The pass simulation follows the real track curve, width and elevation.
 - The pass-time method mirrors CrossMgrImpinj's approach as understood, not its exact code.
 - The receiver sensitivity is applied as a software RSSI filter in live mode.
+
+## Credits
+
+- Bike model: ["Stark Varg Mx1"](https://sketchfab.com/3d-models/stark-varg-mx1-50bddf268cc74f198e36068cc2e3d71c) by [Hari Yojuta](https://sketchfab.com/hariyojuta), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/); simplified, compressed and rescaled (see `web/public/models/CREDITS.md`).

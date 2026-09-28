@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "model:optimize": "gltf-transform optimize public/models/source/Stark.glb public/models/stark-varg-mx1.glb --compress meshopt --simplify-ratio 0.15 --simplify-error 0.002 --texture-compress false"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.0",
@@ -19,6 +20,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.5.1",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.169.0",

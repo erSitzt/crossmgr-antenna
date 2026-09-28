@@ -468,6 +468,7 @@ function BikeView() {
       <div className="row">
         <b>Bike view</b>
         <Check label="Show bike" value={view.showBike} onChange={(showBike) => setView({ showBike })} />
+        <Check label="Realistic bike" value={view.realBike} onChange={(realBike) => setView({ realBike })} />
         <Check label="Rider" value={view.bikeRider} onChange={(bikeRider) => setView({ bikeRider })} />
         <Check label="Links" value={view.bikeLinks} onChange={(bikeLinks) => setView({ bikeLinks })} />
       </div>
@@ -500,6 +501,14 @@ function BikeView() {
         The yellow line on the bike is the tag's dipole axis. An antenna looking along that line sees almost nothing; one looking at it
         side-on sees the most. Link lines: green ≥ 6 dB margin, orange 0–6 dB, red dashed = no read.
       </p>
+      {view.realBike && (
+        <p className="muted credits">
+          Bike model:{' '}
+          <a href="https://sketchfab.com/3d-models/stark-varg-mx1-50bddf268cc74f198e36068cc2e3d71c" target="_blank" rel="noreferrer">“Stark Varg Mx1”</a> by{' '}
+          <a href="https://sketchfab.com/hariyojuta" target="_blank" rel="noreferrer">Hari Yojuta</a>, licensed under{' '}
+          <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a> – simplified, compressed and rescaled.
+        </p>
+      )}
     </div>
   );
 }
