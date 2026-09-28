@@ -14,14 +14,14 @@ export function PassPaths({ sim, setup, selectedLane }: { sim: SimResult; setup:
     const r = setup.sim.rangeM;
     const lanes = sim.lanes.map((l) => {
       const pts: THREE.Vector3[] = [];
-      for (let s = -r; s <= r; s += 0.5) pts.push(new THREE.Vector3(...path.point(s, l.lateralM, h)));
+      for (let s = -r; s <= r; s += 0.5) pts.push(new THREE.Vector3(...path.lanePoint(s, l.laneFrac, h)));
       return pts;
     });
     const wall = sim.lanes.filter((l) => l.wallPoint).map((l) => new THREE.Vector3(...l.wallPoint!));
     const v = setup.sim.speedKmh / 3.6;
     const lane = sim.lanes[selectedLane];
     const reads = (lane?.sampleReads ?? []).map((rd) => ({
-      p: new THREE.Vector3(...path.point(rd.t * v, lane.lateralM, h)),
+      p: new THREE.Vector3(...path.lanePoint(rd.t * v, lane.laneFrac, h)),
       c: portColor(rd.port),
     }));
     return { lanes, wall, reads };

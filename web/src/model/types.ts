@@ -88,10 +88,12 @@ export interface TrackSegment {
   radiusM: number; // turns: centreline radius
   angleDeg: number; // turns: turn angle
   riseM: number; // height change from start to end of the segment (+ = uphill)
+  widthM: number; // track width in this segment (at its end when tapered)
+  taper: boolean; // true: width changes gradually from the previous segment's width
 }
 
 export interface Track {
-  widthM: number;
+  widthM: number; // width at the start of the first segment (used when it tapers)
   startElevationM: number; // elevation at the start of the first segment
   segments: TrackSegment[]; // in direction of travel
   finishSegmentId: string; // segment that contains the finish line

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { makeDefaultSetup, makeTrack } from '../presets/templates';
+import { makeDefaultSetup, makeSegment, makeTrack } from '../presets/templates';
 import { computeZones, defaultVolume } from './grid';
 import { buildLinkCtx, eirpLinearDbm, evalLink } from './link';
 import { boresight, fsplDb, mulMat, rotYXZ } from './math';
 import { runPassSim, optimizePower } from './passSim';
 import { antennaGainDb } from './pattern';
 import { estimatePassTime, quadFit, type Read } from './regression';
-import { finishElevation, TrackPath } from './track';
+import { finishElevation, TrackPath, widthAtU } from './track';
 import { GROUND_PRESETS, groundReflection } from './ground';
 import { migrateSetup, normalizeSetup } from '../model/normalize';
 import type { Setup } from '../model/types';
@@ -91,6 +91,22 @@ describe('track', () => {
     expect(p.elevation(0)).toBeCloseTo(1.2, 6);
     expect(p.elevation(-4 - 5 - 20)).toBeCloseTo(0, 6); // before the ramp
     expect(p.point(0, 2, 0.5)[1]).toBeCloseTo(1.7, 6);
+  });
+});
+
+describe('segment widths', () => {
+  it('abrupt and tapered width changes; lanes scale with the local width', () => {
+    const t = makeTrack('straight');
+    // 50 m straight at 8 m, then a 10 m segment tapering to 12 m, then a 10 m segment at 6 m
+    t.segments.push(makeSegment('straight', { lengthM: 10, widthM: 12, taper: true }), makeSegment('straight', { lengthM: 10, widthM: 6 }));
+    expect(widthAtU(t, 10)).toBe(8);
+    expect(widthAtU(t, 55)).toBeCloseTo(10, 9);
+    expect(widthAtU(t, 60)).toBeCloseTo(12, 9);
+    expect(widthAtU(t, 61)).toBe(6);
+    const p = new TrackPath(t);
+    // finish is at u = 25, so s = 30 is u = 55
+    expect(p.lanePoint(30, 0.5, 0)[2]).toBeCloseTo(5, 3);
+    expect(p.lanePoint(0, -0.5, 0)[2]).toBeCloseTo(-4, 3);
   });
 });
 

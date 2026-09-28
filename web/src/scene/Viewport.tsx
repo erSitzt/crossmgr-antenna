@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { alongFromPosition } from '../model/normalize';
 import { eirpLinearDbm } from '../rf/link';
-import { finishElevation } from '../rf/track';
+import { finishElevation, finishWidth } from '../rf/track';
 import { DEG } from '../rf/math';
 import { useStore } from '../store';
 import { AntennaMesh } from './AntennaMesh';
@@ -95,7 +95,7 @@ function SceneContent() {
       <directionalLight position={[10, 20, 5]} intensity={1.2} castShadow />
       <Grid args={[80, 80]} cellSize={1} sectionSize={5} infiniteGrid fadeDistance={70} cellColor="#3a3f47" sectionColor="#58606b" />
       <TrackMesh track={setup.track} />
-      <FinishPlane width={setup.track.widthM + 2} y={finishElevation(setup.track)} />
+      <FinishPlane width={finishWidth(setup.track) + 2} y={finishElevation(setup.track)} />
       {setup.trusses.map((t) => (
         <TrussMesh key={t.id} ref={setRef(t.id)} truss={t} selected={t.id === selectedId} onSelect={(e) => { e.stopPropagation(); select(t.id); }} />
       ))}

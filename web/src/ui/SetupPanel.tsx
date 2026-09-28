@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import type { SegmentKind, Setup, Track, Truss } from '../model/types';
 import { TRACK_PRESETS, type TrackPreset } from '../presets/templates';
-import { elevationAtU, finishU, segmentLength, segmentStarts, totalLength } from '../rf/track';
+import { elevationAtU, finishU, segmentLength, segmentStarts, totalLength, widthAtU } from '../rf/track';
 import { useStore } from '../store';
 import { Check, NumField, Section, Select, Slider } from './controls';
 
@@ -118,8 +118,16 @@ function TrackEditor({ track }: { track: Track }) {
         <button onClick={() => confirm('Replace the track layout (arch and antennas stay)?') && setTrackPreset(preset)}>Use track</button>
       </div>
       <div className="grid2">
-        <NumField label="Width" unit="m" value={track.widthM} min={2} max={30} step={0.5} onChange={(widthM) => updateTrack({ widthM })} />
         <NumField label="Start elevation" unit="m" value={track.startElevationM} step={0.1} onChange={(startElevationM) => updateTrack({ startElevationM })} />
+        {track.segments[0]?.taper && (
+          <NumField label="Start width" unit="m" value={track.widthM} min={1} max={40} step={0.5} title="Width at the start of segment 1 (it tapers from here)" onChange={(widthM) => updateTrack({ widthM })} />
+        )}
+      </div>
+      <div className="row">
+        <span className="muted">Set all widths:</span>
+        {[6, 8, 10, 12].map((w) => (
+          <button key={w} onClick={() => { updateTrack({ widthM: w }); track.segments.forEach((g) => updateSegment(g.id, { widthM: w })); }}>{w} m</button>
+        ))}
       </div>
 
       <ElevationProfile track={track} />
@@ -155,7 +163,12 @@ function TrackEditor({ track }: { track: Track }) {
                   </>
                 )}
                 <NumField label="Height change" unit="m" value={g.riseM} step={0.1} title="+ = uphill (e.g. ramp onto the finish table), − = downhill" onChange={(riseM) => updateSegment(g.id, { riseM })} />
+                <NumField label={g.taper ? 'Width at end' : 'Width'} unit="m" value={g.widthM} min={1} max={40} step={0.5} onChange={(widthM) => updateSegment(g.id, { widthM })} />
               </div>
+              <label className="check">
+                <input type="checkbox" checked={g.taper} onChange={(e) => updateSegment(g.id, { taper: e.target.checked })} />
+                <span>Taper from previous width</span>
+              </label>
               {isFinish ? (
                 <NumField
                   label="🏁 Finish at"
@@ -176,8 +189,8 @@ function TrackEditor({ track }: { track: Track }) {
         })}
       </ol>
       <p className="muted">
-        Finish at {fU.toFixed(1)} m of {totalLength(track).toFixed(1)} m, elevation {elevationAtU(track, fU).toFixed(2)} m. The 3D view is
-        centred on the finish line.
+        Finish at {fU.toFixed(1)} m of {totalLength(track).toFixed(1)} m, elevation {elevationAtU(track, fU).toFixed(2)} m, width{' '}
+        {widthAtU(track, fU).toFixed(1)} m. The 3D view is centred on the finish line.
       </p>
     </Section>
   );
@@ -212,6 +225,8 @@ function ElevationProfile({ track }: { track: Track }) {
 }
 
 function ArchSection({ trusses }: { trusses: Truss[] }) {
+  const track = useStore((s) => s.setup.track);
+  const fw = widthAtU(track, finishU(track));
   const updateTruss = useStore((s) => s.updateTruss);
   const addTruss = useStore((s) => s.addTruss);
   const select = useStore((s) => s.select);
@@ -229,6 +244,12 @@ function ArchSection({ trusses }: { trusses: Truss[] }) {
             <NumField label="Span" unit="m" value={t.spanM} min={1} max={40} step={0.5} onChange={(spanM) => updateTruss(t.id, { spanM })} />
             <NumField label="Section" unit="m" value={t.sectionM} min={0.1} max={0.6} step={0.01} onChange={(sectionM) => updateTruss(t.id, { sectionM })} />
           </div>
+          {t.spanM - t.sectionM < fw && (
+            <p className="warn">
+              Uprights stand on the track (finish width {fw.toFixed(1)} m).{' '}
+              <button className="link" onClick={() => updateTruss(t.id, { spanM: Math.ceil((fw + 1.2) * 2) / 2 })}>Fit span to track</button>
+            </p>
+          )}
           <Check label="Base follows track elevation" value={t.followTrack} onChange={(followTrack) => updateTruss(t.id, { followTrack })} />
           {!t.followTrack && (
             <NumField label="Base elevation" unit="m" value={t.position[1]} step={0.1} onChange={(y) => updateTruss(t.id, { position: [t.position[0], y, t.position[2]] })} />

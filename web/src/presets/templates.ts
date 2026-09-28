@@ -35,7 +35,7 @@ export function makeTruss(widthM: number): Truss {
 }
 
 export function makeSegment(kind: TrackSegment['kind'], p: Partial<TrackSegment> = {}): TrackSegment {
-  return { id: newId('seg'), kind, lengthM: 10, radiusM: 12, angleDeg: 90, riseM: 0, ...p };
+  return { id: newId('seg'), kind, lengthM: 10, radiusM: 12, angleDeg: 90, riseM: 0, widthM: 8, taper: false, ...p };
 }
 
 export type TrackPreset =
@@ -58,8 +58,8 @@ export const TRACK_PRESETS: { id: TrackPreset; label: string }[] = [
 ];
 
 export function makeTrack(preset: TrackPreset, widthM = 8): Track {
-  const S = (lengthM: number, riseM = 0) => makeSegment('straight', { lengthM, riseM });
-  const T = (kind: 'left' | 'right', radiusM = 12, angleDeg = 90) => makeSegment(kind, { radiusM, angleDeg });
+  const S = (lengthM: number, riseM = 0) => makeSegment('straight', { lengthM, riseM, widthM });
+  const T = (kind: 'left' | 'right', radiusM = 12, angleDeg = 90) => makeSegment(kind, { radiusM, angleDeg, widthM });
   const build = (segments: TrackSegment[], finishIndex: number, finishOffsetM: number): Track => ({
     widthM,
     startElevationM: 0,

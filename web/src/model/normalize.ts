@@ -79,17 +79,20 @@ interface TrackV1 {
   lengthAfterM: number;
 }
 
-const seg = (kind: TrackSegment['kind'], p: Partial<TrackSegment> = {}): TrackSegment => ({
+const baseSeg = (kind: TrackSegment['kind'], p: Partial<TrackSegment> = {}): TrackSegment => ({
   id: newId('seg'),
   kind,
   lengthM: 10,
   radiusM: 12,
   angleDeg: 90,
   riseM: 0,
+  widthM: 8,
+  taper: false,
   ...p,
 });
 
 function migrateTrack(t: TrackV1): Track {
+  const seg = (kind: TrackSegment['kind'], p: Partial<TrackSegment> = {}) => baseSeg(kind, { widthM: t.widthM, ...p });
   if (t.shape === 'straight') {
     const g = seg('straight', { lengthM: t.lengthBeforeM + t.lengthAfterM });
     return { widthM: t.widthM, startElevationM: 0, segments: [g], finishSegmentId: g.id, finishOffsetM: t.lengthBeforeM };
@@ -113,7 +116,7 @@ function migrateTrack(t: TrackV1): Track {
 export function migrateSetup(raw: unknown): Setup {
   const s = raw as Setup & { version: number; track: Track | TrackV1 };
   if (!s || typeof s !== 'object' || !Array.isArray(s.antennas)) throw new Error('not a setup file');
-  if (s.version === 2) return normalizeSetup(withGround(s));
+  if (s.version === 2) return normalizeSetup(withSegmentWidths(withGround(s)));
   if (s.version !== 1) throw new Error(`unsupported setup version ${s.version}`);
   const track = migrateTrack(s.track as TrackV1);
   return normalizeSetup(withGround({
@@ -123,6 +126,15 @@ export function migrateSetup(raw: unknown): Setup {
     trusses: s.trusses.map((t) => ({ ...t, followTrack: true })),
     antennaProfiles: s.antennaProfiles?.length ? s.antennaProfiles : ANTENNA_PROFILES,
   }));
+}
+
+/** Early version-2 files had one width for the whole track. */
+function withSegmentWidths(s: Setup): Setup {
+  if (s.track.segments.every((g) => typeof g.widthM === 'number')) return s;
+  return {
+    ...s,
+    track: { ...s.track, segments: s.track.segments.map((g) => ({ ...g, widthM: g.widthM ?? s.track.widthM, taper: g.taper ?? false })) },
+  };
 }
 
 /** Older files had a single |Γ| value instead of a ground model. */

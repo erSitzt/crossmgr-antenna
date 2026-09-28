@@ -1,7 +1,7 @@
 import type { Setup, Vec3 } from '../model/types';
 import { buildLinkCtx, evalLink, tagAxisWorld } from './link';
 import { surfaceNets } from './surfaceNets';
-import { finishElevation } from './track';
+import { finishElevation, maxWidthNearFinish } from './track';
 
 export interface VolumeSpec {
   origin: Vec3;
@@ -11,7 +11,7 @@ export interface VolumeSpec {
 
 /** Region around the finish line that covers the track width plus side margins. */
 export function defaultVolume(setup: Setup, step = 0.2): VolumeSpec {
-  const halfW = setup.track.widthM / 2 + 4;
+  const halfW = maxWidthNearFinish(setup.track) / 2 + 4;
   const xMin = -14, xMax = 14;
   const [yMin, yMax] = verticalRange(setup);
   return {
@@ -84,7 +84,7 @@ export interface SliceData {
 export function computeSlice(setup: Setup, spec: SliceSpec): SliceData {
   const ctx = buildLinkCtx(setup);
   const axisW = tagAxisWorld(setup.tag.axis, DIR, RIGHT);
-  const halfW = setup.track.widthM / 2 + 4;
+  const halfW = maxWidthNearFinish(setup.track) / 2 + 4;
   let uMin: number, vMin: number, uLen: number, vLen: number;
   if (spec.kind === 'horizontal') {
     uMin = -14; uLen = 28; vMin = -halfW; vLen = 2 * halfW;

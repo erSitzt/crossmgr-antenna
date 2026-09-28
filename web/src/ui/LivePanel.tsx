@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { closeStalePasses, estimateFor, useLive, type Pass } from '../live/liveClient';
 import { laneOffsets, peakRssiAlongLane } from '../rf/passSim';
+import { finishWidth } from '../rf/track';
 import { portColor, useStore } from '../store';
 import { Section } from './controls';
 import { RssiChart } from './RssiChart';
@@ -20,7 +21,7 @@ export function LivePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const lanes = laneOffsets(setup.track.widthM, setup.sim.lanes);
+  const lanes = laneOffsets(finishWidth(setup.track), setup.sim.lanes);
   const connect = () => {
     try { localStorage.setItem('crossmgr-antenna.host', host); } catch { /* ignore */ }
     live.send({ cmd: 'connect', host, mock });

@@ -64,6 +64,33 @@ export function elevationAtU(track: Track, u: number): number {
 
 export const finishElevation = (track: Track) => elevationAtU(track, finishU(track));
 
+/** Track width at arc length u (from the start of the first segment). */
+export function widthAtU(track: Track, u: number): number {
+  let w = track.widthM;
+  let start = 0;
+  for (const g of track.segments) {
+    const len = segmentLength(g);
+    const target = g.widthM ?? w;
+    if (u <= start + len) {
+      if (!g.taper || len <= 0) return target;
+      return w + ((target - w) * Math.max(u - start, 0)) / len;
+    }
+    w = target;
+    start += len;
+  }
+  return w;
+}
+
+export const finishWidth = (track: Track) => widthAtU(track, finishU(track));
+
+/** Widest point of the track within ±range metres of the finish (sizes the field views). */
+export function maxWidthNearFinish(track: Track, range = 15): number {
+  const f = finishU(track);
+  let w = 0;
+  for (let u = f - range; u <= f + range; u += 0.5) w = Math.max(w, widthAtU(track, u));
+  return w;
+}
+
 export class TrackPath {
   private readonly ds = 0.05;
   private readonly u0: number; // arc length of the first sample
@@ -141,6 +168,15 @@ export class TrackPath {
 
   elevation(s: number): number {
     return this.interp(this.ys, this.idx(s));
+  }
+
+  width(s: number): number {
+    return widthAtU(this.track, s + this.uFinish);
+  }
+
+  /** Point on a lane given as a fraction of the local width (-0.5 = left edge, +0.5 = right edge). */
+  lanePoint(s: number, frac: number, height: number): Vec3 {
+    return this.point(s, frac * this.width(s), height);
   }
 
   sample(s: number): TrackSample {

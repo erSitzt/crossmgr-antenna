@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { migrateSetup, normalizeSetup } from './model/normalize';
+import { finishWidth } from './rf/track';
 import type { Antenna, AntennaProfile, EnvSettings, ReaderProfile, Setup, SimSettings, TagProfile, Track, TrackSegment, Truss } from './model/types';
 import { makeAntenna, makeDefaultSetup, makeSegment, makeTrack, makeTruss, newId, type TrackPreset } from './presets/templates';
 import type { SliceData, ZoneMesh } from './rf/grid';
@@ -113,12 +114,13 @@ export const useStore = create<State>((set, get) => {
       const s = makeDefaultSetup(preset);
       set({ setup: s, selectedId: null, sim: null, view: { ...get().view, sliceHeight: s.tag.heightM } });
     },
-    setTrackPreset: (preset) => mutTrack((t) => makeTrack(preset, t.widthM)),
+    setTrackPreset: (preset) => mutTrack((t) => makeTrack(preset, finishWidth(t))),
     addSegment: (afterId) =>
       mutTrack((t) => {
         const i = afterId ? t.segments.findIndex((g) => g.id === afterId) : t.segments.length - 1;
         const segments = t.segments.slice();
-        segments.splice(i + 1, 0, makeSegment('straight', { lengthM: 10 }));
+        const prev = t.segments[i];
+        segments.splice(i + 1, 0, makeSegment('straight', { lengthM: 10, widthM: prev?.widthM ?? t.widthM }));
         return { ...t, segments };
       }),
     updateSegment: (id, p) =>
@@ -161,7 +163,7 @@ export const useStore = create<State>((set, get) => {
       const used = new Set(s.antennas.map((a) => a.port));
       const port = [1, 2, 3, 4].find((p) => !used.has(p)) ?? s.antennas.length + 1;
       const truss = s.trusses[0];
-      const half = (s.track.widthM + 1) / 2;
+      const half = (finishWidth(s.track) + 1) / 2;
       const mount = (member: 'left' | 'right' | 'top', alongM: number) =>
         truss ? { mount: { trussId: truss.id, member, alongM } } : {};
       const a =
@@ -197,7 +199,7 @@ export const useStore = create<State>((set, get) => {
     updateTruss: (id, p) =>
       mut((s) => ({ ...s, trusses: s.trusses.map((t) => (t.id === id ? { ...t, ...p } : t)) })),
     addTruss: () => {
-      const t = makeTruss(get().setup.track.widthM);
+      const t = makeTruss(finishWidth(get().setup.track));
       mut((s) => ({ ...s, trusses: [...s.trusses, t] }));
       set({ selectedId: t.id });
     },

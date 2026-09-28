@@ -2,10 +2,11 @@ import type { Setup, Vec3 } from '../model/types';
 import { buildLinkCtx, eirpLinearDbm, evalLink, tagAxisWorld, type LinkCtx } from './link';
 import { estimatePassTime, type Read } from './regression';
 import { makeRng } from './rng';
-import { TrackPath } from './track';
+import { finishWidth, TrackPath } from './track';
 
 export interface LaneResult {
-  lateralM: number;
+  lateralM: number; // lateral offset at the finish line
+  laneFrac: number; // lane as a fraction of the local track width (-0.5 .. 0.5)
   meanReads: number;
   readsPerPort: Record<number, number>; // mean per trial
   missRate: number; // fraction of trials without a time estimate
@@ -49,7 +50,7 @@ function simulatePass(
   ctx: LinkCtx,
   path: TrackPath,
   setup: Setup,
-  lateral: number,
+  frac: number,
   seed: number,
 ): Read[] {
   const rng = makeRng(seed);
@@ -68,6 +69,7 @@ function simulatePass(
     const noise = rng.gauss() * sim.rssiNoiseDb;
     const protocolOk = rng.next() < 0.9;
     const smp = path.sample(v * t);
+    const lateral = frac * path.width(v * t);
     const pos: Vec3 = [smp.pos[0] + smp.right[0] * lateral, smp.pos[1] + tag.heightM, smp.pos[2] + smp.right[2] * lateral];
     const res = evalLink(ctx, a, pos, tagAxisWorld(tag.axis, smp.dir, smp.right));
     if (protocolOk && res.margin + noise > 0) {
@@ -82,14 +84,16 @@ export function runPassSim(setup: Setup, opts: SimOptions = {}): SimResult {
   const path = new TrackPath(setup.track);
   const { sim } = setup;
   const v = sim.speedKmh / 3.6;
-  const lanes: LaneResult[] = laneOffsets(setup.track.widthM, sim.lanes).map((lateral, li) => {
+  const fw = finishWidth(setup.track);
+  const lanes: LaneResult[] = laneOffsets(fw, sim.lanes).map((lateral, li) => {
+    const frac = lateral / fw;
     const errors: number[] = [];
     const perPort: Record<number, number> = {};
     let totalReads = 0;
     let misses = 0;
     let sample: Read[] = [];
     for (let tr = 0; tr < sim.trials; tr++) {
-      const reads = simulatePass(ctx, path, setup, lateral, sim.seed * 100003 + li * 1009 + tr);
+      const reads = simulatePass(ctx, path, setup, frac, sim.seed * 100003 + li * 1009 + tr);
       if (tr === 0 && opts.keepSamples) sample = reads;
       totalReads += reads.length;
       for (const r of reads) perPort[r.port] = (perPort[r.port] ?? 0) + 1;
@@ -101,13 +105,14 @@ export function runPassSim(setup: Setup, opts: SimOptions = {}): SimResult {
     const meanErr = mean(errors);
     return {
       lateralM: lateral,
+      laneFrac: frac,
       meanReads: totalReads / sim.trials,
       readsPerPort: perPort,
       missRate: misses / sim.trials,
       meanErrCm: meanErr,
       stdErrCm: std(errors),
       errorsCm: errors,
-      wallPoint: errors.length ? path.point(meanErr / 100, lateral, setup.tag.heightM) : null,
+      wallPoint: errors.length ? path.lanePoint(meanErr / 100, frac, setup.tag.heightM) : null,
       sampleReads: sample,
     };
   });
@@ -142,12 +147,14 @@ export function objective(r: {
 }
 
 /** Noise-free peak RSSI per reader port for a tag travelling along one lane (for calibration). */
-export function peakRssiAlongLane(setup: Setup, lateral: number): Record<number, number> {
+export function peakRssiAlongLane(setup: Setup, lateralAtFinish: number): Record<number, number> {
+  const frac = lateralAtFinish / finishWidth(setup.track);
   const ctx = buildLinkCtx(setup);
   const path = new TrackPath(setup.track);
   const out: Record<number, number> = {};
   for (let s = -setup.sim.rangeM; s <= setup.sim.rangeM; s += 0.1) {
     const smp = path.sample(s);
+    const lateral = frac * path.width(s);
     const pos: Vec3 = [smp.pos[0] + smp.right[0] * lateral, smp.pos[1] + setup.tag.heightM, smp.pos[2] + smp.right[2] * lateral];
     const axis = tagAxisWorld(setup.tag.axis, smp.dir, smp.right);
     for (const a of ctx.antennas) {

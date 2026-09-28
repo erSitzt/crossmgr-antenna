@@ -2,14 +2,13 @@ import { Line } from '@react-three/drei';
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import type { Track } from '../model/types';
-import { finishElevation, TrackPath } from '../rf/track';
+import { finishElevation, finishWidth, TrackPath } from '../rf/track';
 
 const LEAD = 10; // extra metres drawn before the first / after the last segment
 
 export function TrackMesh({ track }: { track: Track }) {
   const { surface, skirt, finish, edges, arrows } = useMemo(() => {
     const path = new TrackPath(track);
-    const half = track.widthM / 2;
     const top: number[] = [];
     const topIdx: number[] = [];
     const side: number[] = [];
@@ -19,8 +18,8 @@ export function TrackMesh({ track }: { track: Track }) {
     const step = 0.25;
     let n = 0;
     for (let s = path.trackStartS - LEAD; s <= path.trackEndS + LEAD + 1e-6; s += step, n++) {
-      const l = path.point(s, -half, 0.005);
-      const r = path.point(s, half, 0.005);
+      const l = path.lanePoint(s, -0.5, 0.005);
+      const r = path.lanePoint(s, 0.5, 0.005);
       top.push(...l, ...r);
       // skirts down to the ground on both sides (only visible where the track is raised)
       side.push(l[0], l[1], l[2], l[0], Math.min(0, l[1]), l[2], r[0], r[1], r[2], r[0], Math.min(0, r[1]), r[2]);
@@ -50,7 +49,7 @@ export function TrackMesh({ track }: { track: Track }) {
       const smp = path.sample(s);
       arrows.push({ pos: new THREE.Vector3(smp.pos[0], smp.pos[1] + 0.02, smp.pos[2]), yaw: Math.atan2(-smp.dir[2], smp.dir[0]) });
     }
-    return { surface, skirt, finish: { half, y: finishElevation(track) }, edges: [edgeL, edgeR], arrows };
+    return { surface, skirt, finish: { half: finishWidth(track) / 2, y: finishElevation(track) }, edges: [edgeL, edgeR], arrows };
   }, [track]);
 
   return (
